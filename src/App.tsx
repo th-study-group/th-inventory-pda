@@ -577,6 +577,8 @@ export default function App() {
         setIsVoiceRecording(false);
         setVoiceTarget(null);
       }
+
+      recognition.start();
     };
 
     voiceRecognitionRef.current = recognition;
@@ -584,6 +586,20 @@ export default function App() {
     setVoiceTarget(targetField);
 
     recognition.start();
+  };
+
+  const stopVoiceRecordingIfActive = () => {
+    if (!isVoiceRecording) return;
+
+    voiceManualStopRef.current = true;
+
+    if (voiceRecognitionRef.current) {
+      voiceRecognitionRef.current.stop();
+      voiceRecognitionRef.current = null;
+    }
+
+    setIsVoiceRecording(false);
+    setVoiceTarget(null);
   };
 
   // 공통 창고 중복 판단 핸들러
@@ -2955,8 +2971,15 @@ export default function App() {
           {/* [화면 6] 재고이동 (TRANS) */}
           {/* ------------------------------------------ */}
           {currentPage === 'TRANS' && (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '16px', boxSizing: 'border-box' }}>
-              
+            <div
+              style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                padding: '16px',
+                boxSizing: 'border-box'
+              }}
+            >
               {/* 출발 위치 스캔 */}
               <div style={{ marginBottom: '10px' }}>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: COLORS.textMuted, marginBottom: '4px' }}>
@@ -2975,6 +2998,8 @@ export default function App() {
                     value={transFromLoc}
                     onContextMenu={(e) => e.preventDefault()}
                     onFocus={(e) => {
+                      stopVoiceRecordingIfActive();
+
                       setTransFromLocInputMode('none');
                       e.currentTarget.select();
                     }}
@@ -3154,6 +3179,8 @@ export default function App() {
                       value={transToLoc}
                       onContextMenu={(e) => e.preventDefault()}
                       onFocus={(e) => {
+                        stopVoiceRecordingIfActive();
+
                         setTransToLocInputMode('none');
                         e.currentTarget.select();
                       }}
@@ -3222,7 +3249,10 @@ export default function App() {
                       pattern="[0-9]*"
                       autoComplete="off"
                       value={String(transQty)}
-                      onFocus={(e) => e.currentTarget.select()}
+                      onFocus={(e) => {
+                        stopVoiceRecordingIfActive();
+                        e.currentTarget.select();
+                      }}
                       onChange={(e) => {
                         const onlyNumber = e.target.value.replace(/[^0-9]/g, '');
                         setTransQty(onlyNumber === '' ? 0 : Number(onlyNumber));
@@ -3251,11 +3281,23 @@ export default function App() {
                       type="text"
                       placeholder="사유를 입력해 주세요."
                       value={transReason}
-                      onFocus={() => {
-                        if (isVoiceRecording && voiceTarget === 'transReason') {
-                          toggleVoiceRecording('transReason', transReason, setTransReason);
-                        }
+                      onFocus={(e) => {
+                        const target = e.currentTarget;
+
+                        setTimeout(() => {
+                          target.focus();
+                          target.select();
+                        }, 80);
                       }}
+                      onClick={(e) => {
+                        const target = e.currentTarget;
+
+                        setTimeout(() => {
+                          target.select();
+                        }, 120);
+                      }}
+                      onContextMenu={(e) => e.preventDefault()}
+                      onMouseUp={(e) => e.preventDefault()}
                       onChange={(e) => setTransReason(e.target.value)}
                       style={{
                         flex: 1,
@@ -3263,13 +3305,17 @@ export default function App() {
                         borderRadius: '8px',
                         border: `1.5px solid ${isVoiceRecording && voiceTarget === 'transReason' ? COLORS.primary : COLORS.border}`,
                         padding: '0 12px',
-                        fontSize: '13px',
+                        fontSize: '16px',
                         boxSizing: 'border-box',
-                        backgroundColor: isVoiceRecording && voiceTarget === 'transReason' ? '#FFF5F0' : '#FFF'
+                        backgroundColor: isVoiceRecording && voiceTarget === 'transReason' ? '#FFF5F0' : '#FFF',
+                        WebkitTouchCallout: 'none',
+                        userSelect: 'text',
+                        WebkitUserSelect: 'text'
                       }}
                     />
-
                     <button 
+                      type="button"
+                      data-voice-button="transReason"
                       onClick={() => toggleVoiceRecording('transReason', transReason, setTransReason)}
                       style={{
                         width: '42px',
@@ -3629,7 +3675,8 @@ export default function App() {
                   width: '100%',
                   height: '280px',
                   backgroundColor: '#000',
-                  objectFit: 'cover'
+                  objectFit: 'cover',
+                  transform: 'scaleX(-1)'
                 }}
               />
 
