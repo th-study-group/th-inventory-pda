@@ -1,6 +1,7 @@
 // @ts-nocheck
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { UserRound } from 'lucide-react';
+import { BrowserMultiFormatReader } from '@zxing/browser';
 
 // ==========================================
 // 1. 공통 상수 및 폰트 아이콘 대체 (SVG)
@@ -110,6 +111,13 @@ const SHIPMENT_PARTS_MOCK = [
   { code: '원재료_솔리티-KEY_PCB-8000-01', name: 'EPIC Front PCB_EF-8000 AREA', spec: 'F-6100', qty: 5 }
 ];
 
+// 5. 재고이동/재고실사 Mock
+const LOCATION_STOCK_PARTS_MOCK = [
+  { code: 'RM-ENS-02-VERY-LONG-PART-NAME-2026-A-B-C', name: '이랜시스 통합 제어 모듈_베이스온_테스트_2', spec: 'A-200', qty: 4 },
+  { code: 'RM-ENS-02-VERY-LO...', name: '이랜시스 통합 제어 모듈_테스트_1', spec: 'B-100', qty: 150 },
+  { code: 'RM-SH-M1-SAMPLE', name: '샘플 알루미늄 판넬 커버 스펙', spec: 'SAMPLE', qty: 250 }
+]
+
 // ==========================================
 // SVG 아이콘 컴포넌트 목록
 // ==========================================
@@ -160,6 +168,8 @@ export default function App() {
   // 공통 음성 입력 가상 타이머 상태
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
   const [voiceTarget, setVoiceTarget] = useState(null); // 'transReason', 'inspectReason' 등
+  const voiceRecognitionRef = useRef<any>(null);
+  const voiceManualStopRef = useRef(false);
 
   // ==========================================
   // 각 기능별 복합 데이터 상태
@@ -240,7 +250,7 @@ export default function App() {
   const [selectedOutItem, setSelectedOutItem] = useState<any>(null);
   const [pendingOutItem, setPendingOutItem] = useState<any>(null);
 
-  const [outQty, setOutQty] = useState(1);
+  const [outQty, setOutQty] = useState(0);
   const [outLocInputMode, setOutLocInputMode] = useState<'none' | 'text'>('none');
 
   const [outAccordionOpen, setOutAccordionOpen] = useState(false);
@@ -250,13 +260,29 @@ export default function App() {
   const [outModalOpenName, setOutModalOpenName] = useState<string | null>(null);
 
   // [5. 재고이동 상태]
+  const transFromLocRef = React.useRef<HTMLInputElement | null>(null);
+  const transToLocRef = React.useRef<HTMLInputElement | null>(null);
+  const transReasonRef = React.useRef<HTMLInputElement | null>(null);
+
   const [transFromLoc, setTransFromLoc] = useState('');
-  const [transSelectedPart, setTransSelectedPart] = useState(null); // 이동할 대상 품목
+  const [transSelectedPart, setTransSelectedPart] = useState<any>(null);
   const [transToLoc, setTransToLoc] = useState('');
-  const [transQty, setTransQty] = useState(50);
-  const [transReason, setTransReason] = useState('오적재 이동 정정');
+  const [transQty, setTransQty] = useState(0);
+  const [transReason, setTransReason] = useState('');
   const [transAccordionOpen, setTransAccordionOpen] = useState(false);
   const [transListModalOpen, setTransListModalOpen] = useState(false);
+  const [transFromLocInputMode, setTransFromLocInputMode] = useState<'none' | 'text'>('none');
+  const [transToLocInputMode, setTransToLocInputMode] = useState<'none' | 'text'>('none');
+
+  const [pendingTransPart, setPendingTransPart] = useState<any>(null);
+  const [transModalOpenCode, setTransModalOpenCode] = useState<string | null>(null);
+  const [transModalOpenName, setTransModalOpenName] = useState<string | null>(null);
+
+  const transQrVideoRef = useRef<HTMLVideoElement | null>(null);
+  const transQrStreamRef = useRef<MediaStream | null>(null);
+
+  const [transQrOpen, setTransQrOpen] = useState(false);
+  const [transQrTarget, setTransQrTarget] = useState<'from' | 'to' | null>(null);
   
   // 창고 중복 관련 전역 공유 상태
   const [warehouseSelector, setWarehouseSelector] = useState(null); // { options: [], onSelect, title }
@@ -369,7 +395,7 @@ export default function App() {
       setOutWarehouse('');
       setSelectedOutItem(null);
       setPendingOutItem(null);
-      setOutQty(1);
+      setOutQty(0);
       setOutAccordionOpen(false);
       setOutListModalOpen(false);
       setOutModalOpenCode(null);
@@ -448,25 +474,116 @@ export default function App() {
   };
 
   // 가상 음성 입력 토글 함수
+  // 실제 브라우저 음성 입력 토글 함수
   const toggleVoiceRecording = (targetField, currentVal, setter) => {
-    if (isVoiceRecording) {
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setErrorMsg('현재 브라우저에서는 음성 입력을 지원하지 않습니다. 모바일 크롬에서 테스트해 주세요.');
+      return;
+    }
+
+    // 이미 녹음 중이면 사용자가 직접 종료한 것으로 처리
+    if (isVoiceRecording && voiceTarget === targetField) {
+      voiceManualStopRef.current = true;
+
+      if (voiceRecognitionRef.current) {
+        voiceRecognitionRef.current.stop();
+        voiceRecognitionRef.current = null;
+      }
+
       setIsVoiceRecording(false);
       setVoiceTarget(null);
-    } else {
-      setIsVoiceRecording(true);
-      setVoiceTarget(targetField);
-      let count = 0;
-      const originalText = currentVal;
-      const interval = setInterval(() => {
-        count++;
-        setter(originalText + (count === 1 ? ' 실사 수량 정정 처리' : ' 및 창고 재고 상태 동기화 완료'));
-        if (count >= 2) {
-          clearInterval(interval);
-          setIsVoiceRecording(false);
-          setVoiceTarget(null);
-        }
-      }, 1000);
+      return;
     }
+
+    // 다른 필드 녹음 중이면 먼저 종료
+    if (voiceRecognitionRef.current) {
+      voiceManualStopRef.current = true;
+      voiceRecognitionRef.current.stop();
+      voiceRecognitionRef.current = null;
+    }
+
+    const recognition = new SpeechRecognition();
+
+    voiceManualStopRef.current = false;
+
+    recognition.lang = 'ko-KR';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    let baseText = currentVal || '';
+
+    recognition.onresult = (event: any) => {
+      let finalText = '';
+      let interimText = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const text = event.results[i][0].transcript;
+
+        if (event.results[i].isFinal) {
+          finalText += text;
+        } else {
+          interimText += text;
+        }
+      }
+
+      const nextText = `${baseText} ${finalText || interimText}`.trim();
+      setter(nextText);
+
+      if (finalText) {
+        baseText = nextText;
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      setIsVoiceRecording(false);
+      setVoiceTarget(null);
+      voiceRecognitionRef.current = null;
+
+      if (event?.error === 'not-allowed') {
+        setErrorMsg('마이크 권한이 거부되었습니다. 브라우저 권한을 허용해 주세요.');
+        return;
+      }
+
+      setErrorMsg('음성 입력 중 오류가 발생했습니다.');
+    };
+
+    recognition.onend = () => {
+      voiceRecognitionRef.current = null;
+
+      // 사용자가 직접 끈 경우만 종료 상태 유지
+      if (voiceManualStopRef.current) {
+        setIsVoiceRecording(false);
+        setVoiceTarget(null);
+        return;
+      }
+
+      // 브라우저가 자동으로 끊으면 다시 시작 시도
+      try {
+        const nextRecognition = new SpeechRecognition();
+
+        nextRecognition.lang = 'ko-KR';
+        nextRecognition.continuous = true;
+        nextRecognition.interimResults = true;
+        nextRecognition.onresult = recognition.onresult;
+        nextRecognition.onerror = recognition.onerror;
+        nextRecognition.onend = recognition.onend;
+
+        voiceRecognitionRef.current = nextRecognition;
+        nextRecognition.start();
+      } catch (e) {
+        setIsVoiceRecording(false);
+        setVoiceTarget(null);
+      }
+    };
+
+    voiceRecognitionRef.current = recognition;
+    setIsVoiceRecording(true);
+    setVoiceTarget(targetField);
+
+    recognition.start();
   };
 
   // 공통 창고 중복 판단 핸들러
@@ -875,27 +992,161 @@ export default function App() {
   };
 
   // [5. 재고이동]
-  const handleTransFromLocScan = (val) => {
-    setTransFromLoc(val);
-    if (value.trim()) {
-      checkWarehouseOverlap(val, (wh) => {
-        // 출발지 기반 품목 목록 세팅
-        setTransSelectedPart({
-          code: 'RM-ENS-02-VERY-LONG-PART-NAME-2026-A-B-C',
-          name: '이랜시스 통합 제어 모듈_베이스온_테스트_2',
-          qty: 4
-        });
-      }, '출발 창고 선택');
+  const handleTransFromLocScan = (scanValue = transFromLoc) => {
+    const target = scanValue.trim();
+
+    setTransFromLoc(target);
+    hidePdaKeyboard();
+
+    if (!target) {
+      setErrorMsg('출발지 위치를 스캔해 주세요.');
+      return;
     }
+
+    const matchedWHs = findWarehousesByCode(target);
+
+    if (matchedWHs.length === 0) {
+      setTransSelectedPart(null);
+      setPendingTransPart(null);
+      setTransQty(0);
+      setTransListModalOpen(false);
+      setErrorMsg('등록되지 않은 위치입니다.');
+      return;
+    }
+
+    checkWarehouseOverlap(
+      target,
+      () => {
+        showLoading(() => {
+          setTransSelectedPart(null);
+          setPendingTransPart(null);
+          setTransQty(0);
+          setTransAccordionOpen(false);
+          setTransModalOpenCode(null);
+          setTransModalOpenName(null);
+          setTransListModalOpen(true);
+        });
+      },
+      '출발 창고 선택'
+    );
   };
 
-  const handleTransToLocScan = (val) => {
-    setTransToLoc(val);
-    
-    if (value.trim()) {
-      checkWarehouseOverlap(val, (wh) => {
-        // 목적지 설정 완료
-      }, '도착 창고 선택');
+  const handleTransToLocScan = (scanValue = transToLoc) => {
+    const target = scanValue.trim();
+
+    setTransToLoc(target);
+    hidePdaKeyboard();
+
+    if (!target) {
+      setErrorMsg('도착지 위치를 스캔해 주세요.');
+      return;
+    }
+
+    const matchedWHs = findWarehousesByCode(target);
+
+    if (matchedWHs.length === 0) {
+      setErrorMsg('등록되지 않은 이동위치입니다.');
+      return;
+    }
+
+    checkWarehouseOverlap(
+      target,
+      () => {
+        setTimeout(() => {
+          transToLocRef.current?.focus();
+          transToLocRef.current?.select();
+        }, 150);
+      },
+      '도착 창고 선택'
+    );
+  };
+
+  const resetTransForm = () => {
+    setTransFromLoc('');
+    setTransSelectedPart(null);
+    setPendingTransPart(null);
+    setTransToLoc('');
+    setTransQty(0);
+    setTransReason('');
+    setTransAccordionOpen(false);
+    setTransListModalOpen(false);
+    setTransModalOpenCode(null);
+    setTransModalOpenName(null);
+  };
+
+  const stopTransQrScan = () => {
+    transQrStreamRef.current?.getTracks().forEach((track) => track.stop());
+    transQrStreamRef.current = null;
+    setTransQrOpen(false);
+    setTransQrTarget(null);
+  };
+
+  const startTransQrScan = (target: 'from' | 'to') => {
+    setTransQrTarget(target);
+    setTransQrOpen(true);
+
+    setTimeout(() => {
+      runTransQrScan(target);
+    }, 300);
+  };
+
+  const runTransQrScan = async (target: 'from' | 'to') => {
+    try {
+      const video = transQrVideoRef.current;
+
+      if (!video) {
+        setErrorMsg('카메라 화면을 찾을 수 없습니다.');
+        stopTransQrScan();
+        return;
+      }
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setErrorMsg('이 브라우저는 카메라 스캔을 지원하지 않습니다.');
+        stopTransQrScan();
+        return;
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'environment'
+        },
+        audio: false
+      });
+
+      transQrStreamRef.current = stream;
+      video.srcObject = stream;
+
+      await new Promise<void>((resolve) => {
+        video.onloadedmetadata = () => {
+          resolve();
+        };
+      });
+
+      await video.play();
+
+      const reader = new BrowserMultiFormatReader();
+
+      const result = await reader.decodeOnceFromVideoElement(video);
+      const value = result.getText();
+
+      stopTransQrScan();
+
+      if (target === 'from') {
+        setTransFromLoc(value);
+        handleTransFromLocScan(value);
+        return;
+      }
+
+      setTransToLoc(value);
+      handleTransToLocScan(value);
+    } catch (e) {
+      console.error('QR scan error:', e);
+
+      stopTransQrScan();
+
+      setErrorMsg(
+        '카메라 스캔에 실패했습니다.\n모바일 브라우저 권한 또는 HTTPS 환경을 확인해 주세요.'
+      );
     }
   };
 
@@ -978,7 +1229,13 @@ export default function App() {
             >
               {false && currentPage !== 'MAIN' && (
                 <button 
-                  onClick={() => setCurrentPage('MAIN')}
+                  onClick={() => {
+                    if (currentPage === 'TRANS') {
+                      resetTransForm();
+                    }
+
+                    setCurrentPage('MAIN');
+                  }}
                   style={{
                     background: 'none',
                     border: 'none',
@@ -1175,7 +1432,13 @@ export default function App() {
                   <button 
                     key={menu.id}
                     onClick={() => {
-                      showLoading(() => setCurrentPage(menu.id));
+                      showLoading(() => {
+                        if (menu.id === 'TRANS') {
+                          resetTransForm();
+                        }
+
+                        setCurrentPage(menu.id);
+                      });
                     }}
                     style={{
                       backgroundColor: COLORS.white,
@@ -2662,7 +2925,7 @@ export default function App() {
                     setOutWarehouse('');
                     setSelectedOutItem(null);
                     setPendingOutItem(null);
-                    setOutQty(1);
+                    setOutQty(0);
                     setOutAccordionOpen(false);
 
                     setTimeout(() => {
@@ -2696,13 +2959,36 @@ export default function App() {
               
               {/* 출발 위치 스캔 */}
               <div style={{ marginBottom: '10px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: COLORS.textMuted, marginBottom: '4px' }}>출발지 위치</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: COLORS.textMuted, marginBottom: '4px' }}>
+                  위치
+                </label>
+
                 <div style={{ position: 'relative' }}>
                   <input 
+                    ref={transFromLocRef}
                     type="text"
-                    placeholder="출발위치 바코드 스캔"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    inputMode={transFromLocInputMode}
+                    placeholder="위치 바코드 스캔"
                     value={transFromLoc}
-                    onChange={(e) => handleTransFromLocScan(e.target.value)}
+                    onContextMenu={(e) => e.preventDefault()}
+                    onFocus={(e) => {
+                      setTransFromLocInputMode('none');
+                      e.currentTarget.select();
+                    }}
+                    onClick={(e) => {
+                      setTransFromLocInputMode('text');
+                      e.currentTarget.select();
+                    }}
+                    onChange={(e) => setTransFromLoc(e.currentTarget.value)}
+                    onKeyUp={(e) => {
+                      if (e.key === 'Enter' || e.key === 'Tab') {
+                        e.preventDefault();
+                        handleTransFromLocScan(e.currentTarget.value);
+                      }
+                    }}
                     style={{
                       width: '100%',
                       height: '42px',
@@ -2713,49 +2999,175 @@ export default function App() {
                       boxSizing: 'border-box'
                     }}
                   />
-                  <span style={{ position: 'absolute', right: '10px', top: '11px', color: COLORS.primary }}>
+
+                  <button
+                    type="button"
+                    onClick={() => startTransQrScan('from')}
+                    style={{
+                      position: 'absolute',
+                      right: '8px',
+                      top: '8px',
+                      width: '28px',
+                      height: '28px',
+                      border: 'none',
+                      background: 'transparent',
+                      color: COLORS.primary,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer'
+                    }}
+                  >
                     <SvgBarcode />
-                  </span>
-                </div>
-                <div style={{ fontSize: '10px', color: COLORS.textMuted, marginTop: '2px' }}>
-                  중복 위치코드 테스트: <strong onClick={() => handleTransFromLocScan('C03')} style={{ color: COLORS.primary, textDecoration: 'underline', cursor: 'pointer' }}>C03</strong>
+                  </button>
                 </div>
               </div>
 
               {/* 품목 정보 영역 */}
-              <div style={{ backgroundColor: COLORS.white, borderRadius: '12px', padding: '10px 14px', border: `1px solid ${COLORS.border}`, marginBottom: '10px' }}>
-                <div 
-                  onClick={() => setTransAccordionOpen(!transAccordionOpen)}
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
-                >
-                  <span style={{ fontSize: '11px', color: COLORS.textMuted, fontWeight: 'bold' }}>이동 대상 품목 정보</span>
-                  <span style={{ color: COLORS.primary }}>{transAccordionOpen ? <SvgChevronUp /> : <SvgChevronDown />}</span>
-                </div>
-
-                <div style={{ fontSize: '13px', color: COLORS.primary, fontWeight: 'bold', marginTop: '2px' }}>
-                  {transSelectedPart ? transSelectedPart.code : '출발지 스캔 시 로드'}
-                </div>
-
-                {transAccordionOpen && transSelectedPart && (
-                  <div style={{ fontSize: '10px', color: COLORS.textMuted, marginTop: '4px', lineHeight: '1.4' }}>
-                    품명: {transSelectedPart.name}<br />
-                    이동 가능 재고수량: <strong>{transSelectedPart.qty} EA</strong>
+              {/* 이동 대상 품목 아코디언 */}
+              <div
+                onClick={() => {
+                  if (transSelectedPart) {
+                    setTransAccordionOpen(!transAccordionOpen);
+                  }
+                }}
+                style={{
+                  backgroundColor: transSelectedPart && transAccordionOpen ? '#FFF7ED' : COLORS.white,
+                  borderRadius: '8px',
+                  border: `1px solid ${COLORS.border}`,
+                  padding: '0',
+                  marginBottom: '10px',
+                  cursor: transSelectedPart ? 'pointer' : 'default',
+                  overflow: 'hidden',
+                  boxSizing: 'border-box'
+                }}
+              >
+                {!transSelectedPart && (
+                  <div
+                    style={{
+                      height: '42px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '0 12px',
+                      fontSize: '13px',
+                      color: COLORS.primary,
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    위치 스캔 후 품목 선택
                   </div>
+                )}
+
+                {transSelectedPart && (
+                  <>
+                    {/* 접힘/펼침 공통 상단 요약줄 */}
+                    <div
+                      style={{
+                        height: '42px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '0 12px',
+                        boxSizing: 'border-box',
+                        backgroundColor: transAccordionOpen ? '#FFF7ED' : COLORS.white
+                      }}
+                    >
+                      <div
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          fontSize: '13px',
+                          fontWeight: 'bold',
+                          color: COLORS.darkBg,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis'
+                        }}
+                      >
+                        {transSelectedPart.code}
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize: '12px',
+                          fontWeight: 'bold',
+                          color: COLORS.primary,
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        재고 {transSelectedPart.qty} EA
+                      </div>
+
+                      <span style={{ color: COLORS.primary, display: 'flex', alignItems: 'center' }}>
+                        {transAccordionOpen ? <SvgChevronUp /> : <SvgChevronDown />}
+                      </span>
+                    </div>
+
+                    {/* 펼침 상세 영역 */}
+                    {transAccordionOpen && (
+                      <div
+                        style={{
+                          padding: '8px 12px 12px',
+                          backgroundColor: '#FFF7ED',
+                          borderTop: `1px solid ${COLORS.border}`
+                        }}
+                      >
+                        <div style={{ fontSize: '10px', color: COLORS.textMuted, fontWeight: 'bold', marginBottom: '3px' }}>
+                          품번
+                        </div>
+
+                        <div style={{ fontSize: '12px', color: COLORS.darkBg, fontWeight: 'bold', lineHeight: '1.35', marginBottom: '10px' }}>
+                          {transSelectedPart.code}
+                        </div>
+
+                        <div style={{ fontSize: '10px', color: COLORS.textMuted, fontWeight: 'bold', marginBottom: '3px' }}>
+                          품명
+                        </div>
+
+                        <div style={{ fontSize: '12px', color: COLORS.darkBg, fontWeight: 'bold', lineHeight: '1.35' }}>
+                          {transSelectedPart.name}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
-              {/* 도착 위치 설정 및 수량 조정 */}
+              {/* 도착 위치 / 수량 / 사유 */}
               <div style={{ opacity: transSelectedPart ? 1 : 0.4, pointerEvents: transSelectedPart ? 'auto' : 'none', flex: 1 }}>
                 
                 {/* 목적지 위치 스캔 */}
                 <div style={{ marginBottom: '10px' }}>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: COLORS.textMuted, marginBottom: '4px' }}>도착지 위치</label>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: COLORS.textMuted, marginBottom: '4px' }}>
+                    이동 위치
+                  </label>
+
                   <div style={{ position: 'relative' }}>
                     <input 
+                      ref={transToLocRef}
                       type="text"
-                      placeholder="이동할 목적지 위치 스캔"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      inputMode={transToLocInputMode}
+                      placeholder="이동 위치 스캔"
                       value={transToLoc}
-                      onChange={(e) => handleTransToLocScan(e.target.value)}
+                      onContextMenu={(e) => e.preventDefault()}
+                      onFocus={(e) => {
+                        setTransToLocInputMode('none');
+                        e.currentTarget.select();
+                      }}
+                      onClick={(e) => {
+                        setTransToLocInputMode('text');
+                        e.currentTarget.select();
+                      }}
+                      onChange={(e) => setTransToLoc(e.currentTarget.value)}
+                      onKeyUp={(e) => {
+                        if (e.key === 'Enter' || e.key === 'Tab') {
+                          e.preventDefault();
+                          handleTransToLocScan(e.currentTarget.value);
+                        }
+                      }}
                       style={{
                         width: '100%',
                         height: '42px',
@@ -2766,35 +3178,84 @@ export default function App() {
                         boxSizing: 'border-box'
                       }}
                     />
-                    <span style={{ position: 'absolute', right: '10px', top: '11px', color: COLORS.primary }}>
+
+                    <button
+                      type="button"
+                      onClick={() => startTransQrScan('to')}
+                      style={{
+                        position: 'absolute',
+                        right: '8px',
+                        top: '8px',
+                        width: '28px',
+                        height: '28px',
+                        border: 'none',
+                        background: 'transparent',
+                        color: COLORS.primary,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer'
+                      }}
+                    >
                       <SvgBarcode />
-                    </span>
+                    </button>
                   </div>
                 </div>
 
                 {/* 수량 설정 */}
                 <div style={{ marginBottom: '10px' }}>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: COLORS.textMuted, marginBottom: '4px' }}>이동 수량</label>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: COLORS.textMuted, marginBottom: '4px' }}>
+                    이동 수량
+                  </label>
+
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <button onClick={() => setTransQty(Math.max(1, transQty - 1))} style={{ width: '38px', height: '38px', borderRadius: '8px', backgroundColor: COLORS.lightBg, border: `1px solid ${COLORS.border}`, fontSize: '16px', fontWeight: 'bold' }}>-</button>
+                    <button 
+                      onClick={() => setTransQty(Math.max(0, transQty - 1))}
+                      style={{ width: '38px', height: '38px', borderRadius: '8px', backgroundColor: COLORS.lightBg, border: `1px solid ${COLORS.border}`, fontSize: '16px', fontWeight: 'bold' }}
+                    >
+                      -
+                    </button>
+
                     <input 
-                      type="number"
-                      value={transQty}
-                      onChange={(e) => setTransQty(Number(e.target.value))}
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      autoComplete="off"
+                      value={String(transQty)}
+                      onFocus={(e) => e.currentTarget.select()}
+                      onChange={(e) => {
+                        const onlyNumber = e.target.value.replace(/[^0-9]/g, '');
+                        setTransQty(onlyNumber === '' ? 0 : Number(onlyNumber));
+                      }}
                       style={{ flex: 1, height: '38px', textAlign: 'center', fontSize: '15px', fontWeight: 'bold', border: `2px solid ${COLORS.primary}`, borderRadius: '8px' }}
                     />
-                    <button onClick={() => setTransQty(transQty + 1)} style={{ width: '38px', height: '38px', borderRadius: '8px', backgroundColor: COLORS.lightBg, border: `1px solid ${COLORS.border}`, fontSize: '16px', fontWeight: 'bold' }}>+</button>
+
+                    <button 
+                      onClick={() => setTransQty(transQty + 1)}
+                      style={{ width: '38px', height: '38px', borderRadius: '8px', backgroundColor: COLORS.lightBg, border: `1px solid ${COLORS.border}`, fontSize: '16px', fontWeight: 'bold' }}
+                    >
+                      +
+                    </button>
                   </div>
                 </div>
 
-                {/* 이동 사유 (음성 입력 포함) */}
+                {/* 이동 사유 */}
                 <div style={{ marginBottom: '10px' }}>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: COLORS.textMuted, marginBottom: '4px' }}>이동 사유 입력 (음성 및 텍스트)</label>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: COLORS.textMuted, marginBottom: '4px' }}>
+                    이동 사유
+                  </label>
+
                   <div style={{ display: 'flex', gap: '6px' }}>
                     <input 
+                      ref={transReasonRef}
                       type="text"
                       placeholder="사유를 입력해 주세요."
                       value={transReason}
+                      onFocus={() => {
+                        if (isVoiceRecording && voiceTarget === 'transReason') {
+                          toggleVoiceRecording('transReason', transReason, setTransReason);
+                        }
+                      }}
                       onChange={(e) => setTransReason(e.target.value)}
                       style={{
                         flex: 1,
@@ -2807,6 +3268,7 @@ export default function App() {
                         backgroundColor: isVoiceRecording && voiceTarget === 'transReason' ? '#FFF5F0' : '#FFF'
                       }}
                     />
+
                     <button 
                       onClick={() => toggleVoiceRecording('transReason', transReason, setTransReason)}
                       style={{
@@ -2825,41 +3287,35 @@ export default function App() {
                       <SvgMic />
                     </button>
                   </div>
+
                   {isVoiceRecording && voiceTarget === 'transReason' && (
                     <div style={{ fontSize: '10px', color: '#E53E3E', fontWeight: 'bold', marginTop: '2px', textAlign: 'right' }}>
-                      🎙️ 음성 분석 및 실시간 입력 중...
+                      🎙️ 음성 입력 중입니다. 마이크를 다시 누르면 종료됩니다.
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* 수동 리스트 모달 트리거 */}
-              {transSelectedPart && (
-                <div style={{ textAlign: 'center', marginBottom: '8px' }}>
-                  <button 
-                    onClick={() => setTransListModalOpen(true)}
-                    style={{ background: 'none', border: 'none', color: COLORS.primary, fontSize: '12px', fontWeight: 'bold', textDecoration: 'underline', cursor: 'pointer' }}
-                  >
-                    이동 대상 품목 전체에서 수동 검색
-                  </button>
-                </div>
-              )}
-
               {/* 완료 버튼 */}
               <button 
                 onClick={() => {
-                  if (!transSelectedPart || !transToLoc) return;
+                  if (!transSelectedPart || !transToLoc || transQty <= 0) return;
+
                   triggerSuccessSubmit('재고이동', () => {
                     setTransSelectedPart(null);
                     setTransFromLoc('');
                     setTransToLoc('');
+                    setTransQty(0);
+                    setTransReason('');
+                    setTransAccordionOpen(false);
+                    setTransListModalOpen(false);
                   });
                 }}
-                disabled={!transSelectedPart || !transToLoc}
+                disabled={!transSelectedPart || !transToLoc || transQty <= 0}
                 style={{
                   width: '100%',
                   height: '52px',
-                  backgroundColor: (transSelectedPart && transToLoc) ? COLORS.primary : '#CBD5E0',
+                  backgroundColor: (transSelectedPart && transToLoc && transQty > 0) ? COLORS.primary : '#CBD5E0',
                   color: COLORS.white,
                   border: 'none',
                   borderRadius: '12px',
@@ -2867,7 +3323,7 @@ export default function App() {
                   fontWeight: 'bold'
                 }}
               >
-                이동 처리 완료
+                이동하기
               </button>
             </div>
           )}
@@ -3109,6 +3565,87 @@ export default function App() {
         {/* ========================================== */}
         {/* [모달 2] 중복 위치코드 발생 시 창고 선택 모달 */}
         {/* ========================================== */}
+        {transQrOpen && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(0,0,0,0.75)',
+              zIndex: 300,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              padding: '20px',
+              boxSizing: 'border-box'
+            }}
+          >
+            <div
+              style={{
+                width: '100%',
+                maxWidth: '360px',
+                backgroundColor: COLORS.darkBg,
+                borderRadius: '16px',
+                overflow: 'hidden'
+              }}
+            >
+              <div
+                style={{
+                  height: '48px',
+                  padding: '0 14px',
+                  color: COLORS.white,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  fontWeight: 'bold'
+                }}
+              >
+                <span>{transQrTarget === 'from' ? '위치 스캔' : '이동위치 스캔'}</span>
+
+                <button
+                  type="button"
+                  onClick={stopTransQrScan}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: COLORS.white,
+                    fontSize: '22px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+
+              <video
+                ref={transQrVideoRef}
+                autoPlay
+                playsInline
+                muted
+                style={{
+                  width: '100%',
+                  height: '280px',
+                  backgroundColor: '#000',
+                  objectFit: 'cover'
+                }}
+              />
+
+              <div
+                style={{
+                  padding: '12px',
+                  color: COLORS.white,
+                  fontSize: '12px',
+                  textAlign: 'center'
+                }}
+              >
+                QR코드 또는 바코드를 카메라 중앙에 맞춰주세요.
+              </div>
+            </div>
+          </div>
+        )}
         {warehouseSelector && (
           <div style={{
             position: 'absolute',
@@ -3927,63 +4464,255 @@ export default function App() {
         {/* [모달 6] 재고이동 및 실사 수동 품목 조회 */}
         {/* ========================================== */}
         {((transListModalOpen && currentPage === 'TRANS') || (inspectListModalOpen && currentPage === 'INSPECT')) && (
-          <div style={{
-            position: 'absolute',
-            top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            zIndex: 110,
-            display: 'flex',
-            justifyContent: 'flex-end',
-            flexDirection: 'column'
-          }}>
-            <div style={{ backgroundColor: COLORS.white, borderTopLeftRadius: '20px', borderTopRightRadius: '20px', maxHeight: '60%' }}>
-              <div style={{ padding: '14px 16px', borderBottom: `1px solid ${COLORS.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: COLORS.darkBg, color: COLORS.white }}>
-                <span style={{ fontWeight: 'bold', fontSize: '14px' }}>이동/실사 대상 품목 선택</span>
-                <button 
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: COLORS.white,
+              zIndex: 110,
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+          >
+            <div
+              style={{
+                padding: '14px 16px',
+                borderBottom: `1px solid ${COLORS.border}`,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                backgroundColor: COLORS.darkBg,
+                color: COLORS.white
+              }}
+            >
+              <span style={{ fontWeight: 'bold', fontSize: '15px' }}>
+                {currentPage === 'TRANS' ? '이동 대상 선택' : '실사 대상 선택'}
+              </span>
+
+              <button
+                onClick={() => {
+                  setTransListModalOpen(false);
+                  setInspectListModalOpen(false);
+                  setPendingTransPart(null);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: COLORS.white,
+                  fontSize: '18px',
+                  cursor: 'pointer'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div
+              style={{
+                flex: 1,
+                overflowY: 'auto',
+                padding: '12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                backgroundColor: '#FFFFFF'
+              }}
+            >
+              {LOCATION_STOCK_PARTS_MOCK.map((item) => (
+                <div
+                  key={item.code}
                   onClick={() => {
-                    setTransListModalOpen(false);
-                    setInspectListModalOpen(false);
-                  }} 
-                  style={{ background: 'none', border: 'none', color: COLORS.white, fontSize: '16px' }}
+                    hidePdaKeyboard();
+
+                    if (currentPage === 'TRANS') {
+                      setPendingTransPart(item);
+                      return;
+                    }
+
+                    setInspectSelectedPart(item);
+                  }}
+                  style={{
+                    padding: '12px',
+                    borderRadius: '10px',
+                    border:
+                      pendingTransPart?.code === item.code
+                        ? `2px solid ${COLORS.primary}`
+                        : `1.5px solid ${COLORS.border}`,
+                    backgroundColor:
+                      pendingTransPart?.code === item.code ? '#FFF7ED' : '#FFF',
+                    cursor: 'pointer'
+                  }}
                 >
-                  ✕
-                </button>
-              </div>
-              <div style={{ overflowY: 'auto', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {[
-                  { code: 'RM-ENS-02-VERY-LONG-PART-NAME-2026-A-B-C', name: '이랜시스 통합 제어 모듈_베이스온_테스트_2', qty: 4 },
-                  { code: 'RM-ENS-02-VERY-LO...', name: '이랜시스 통합 제어 모듈_테스트_1', qty: 150 },
-                  { code: 'RM-SH-M1-SAMPLE', name: '샘플 알루미늄 판넬 커버 스펙', qty: 250 }
-                ].map((item) => (
-                  <div 
-                    key={item.code}
-                    onClick={() => {
-                      if (currentPage === 'TRANS') {
-                        setTransSelectedPart(item);
-                        setTransQty(item.qty);
-                        setTransListModalOpen(false);
-                      } else {
-                        setInspectSelectedPart(item);
-                        setInspectQty(item.qty);
-                        setInspectListModalOpen(false);
-                      }
-                    }}
+                  <div
                     style={{
-                      padding: '12px',
-                      borderRadius: '8px',
-                      border: `1.5px solid ${COLORS.border}`,
-                      backgroundColor: '#FFF',
-                      cursor: 'pointer'
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      marginBottom: '6px'
                     }}
                   >
-                    <div style={{ fontWeight: 'bold', fontSize: '13px', color: COLORS.primary }}>{item.code}</div>
-                    <div style={{ fontSize: '11px', color: COLORS.textMuted, marginTop: '2px' }}>{item.name}</div>
-                    <div style={{ fontSize: '11px', color: COLORS.textMain, marginTop: '4px', textAlign: 'right' }}>
-                      전산고: <strong>{item.qty} EA</strong>
+                    <div
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        fontSize: '13px',
+                        fontWeight: 'bold',
+                        color: COLORS.darkBg,
+                        whiteSpace: transModalOpenCode === item.code ? 'normal' : 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        lineHeight: '1.35'
+                      }}
+                    >
+                      품번: {item.code}
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setTransModalOpenCode(
+                          transModalOpenCode === item.code ? null : item.code
+                        );
+                      }}
+                      style={{
+                        width: '28px',
+                        height: '28px',
+                        border: 'none',
+                        background: 'transparent',
+                        color: COLORS.primary,
+                        cursor: 'pointer',
+                        flexShrink: 0
+                      }}
+                    >
+                      {transModalOpenCode === item.code ? <SvgChevronUp /> : <SvgChevronDown />}
+                    </button>
                   </div>
-                ))}
-              </div>
+
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      marginBottom: '8px'
+                    }}
+                  >
+                    <div
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        fontSize: '13px',
+                        fontWeight: 'bold',
+                        color: COLORS.darkBg,
+                        whiteSpace: transModalOpenName === item.code ? 'normal' : 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        lineHeight: '1.35'
+                      }}
+                    >
+                      품명: {item.name}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setTransModalOpenName(
+                          transModalOpenName === item.code ? null : item.code
+                        );
+                      }}
+                      style={{
+                        width: '28px',
+                        height: '28px',
+                        border: 'none',
+                        background: 'transparent',
+                        color: COLORS.primary,
+                        cursor: 'pointer',
+                        flexShrink: 0
+                      }}
+                    >
+                      {transModalOpenName === item.code ? <SvgChevronUp /> : <SvgChevronDown />}
+                    </button>
+                  </div>
+
+                  <div
+                    style={{
+                      borderTop: `1px dashed ${COLORS.border}`,
+                      paddingTop: '8px',
+                      fontSize: '12px',
+                      fontWeight: 'bold',
+                      color: COLORS.primary,
+                      textAlign: 'left'
+                    }}
+                  >
+                    재고: {item.qty} EA
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div
+              style={{
+                padding: '12px',
+                borderTop: `1px solid ${COLORS.border}`,
+                backgroundColor: COLORS.white
+              }}
+            >
+              <button
+                onClick={() => {
+                  if (currentPage === 'TRANS') {
+                    if (!pendingTransPart) {
+                      hidePdaKeyboard();
+                      setErrorMsg('이동할 품목을 선택해주세요.');
+                      return;
+                    }
+
+                    hidePdaKeyboard();
+
+                    setTransSelectedPart(pendingTransPart);
+                    setTransQty(pendingTransPart.qty);
+                    setTransAccordionOpen(false);
+
+                    setTransModalOpenCode(null);
+                    setTransModalOpenName(null);
+                    setTransListModalOpen(false);
+
+                    setTimeout(() => {
+                      setTransToLocInputMode('none');
+                      transToLocRef.current?.focus();
+                      transToLocRef.current?.select();
+                    }, 200);
+
+                    return;
+                  }
+
+                  if (!inspectSelectedPart) {
+                    hidePdaKeyboard();
+                    setErrorMsg('실사할 품목을 선택해주세요.');
+                    return;
+                  }
+
+                  setInspectQty(inspectSelectedPart.qty);
+                  setInspectAccordionOpen(false);
+                  setInspectListModalOpen(false);
+                }}
+                style={{
+                  width: '100%',
+                  height: '52px',
+                  backgroundColor: COLORS.primary,
+                  color: COLORS.white,
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer'
+                }}
+              >
+                적용
+              </button>
             </div>
           </div>
         )}
