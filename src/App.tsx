@@ -106,7 +106,7 @@ const WORK_ORDERS_MOCK = {
 
 // 4. 출고 Mock
 const SHIPMENT_PARTS_MOCK = [
-  { code: '원재료_이랜시스-02', name: '이랜시스 일반모티스', spec: 'MINI-UNI', qty: 5 },
+  { code: '원재료_이랜시스-02-20', name: '이랜시스 일반모티스', spec: 'MINI-UNI', qty: 13 },
   { code: '원재료_솔리티-KEY_PCB-8000-01', name: 'EPIC Front PCB_EF-8000 AREA', spec: 'F-6100', qty: 5 }
 ];
 
@@ -145,71 +145,6 @@ export default function App() {
 
   const partsInputRef = React.useRef(null);
   const [partsScanInputMode, setPartsScanInputMode] = useState<'none' | 'text'>('none');
-
-  React.useEffect(() => {
-    if (currentPage === 'PARTS_IN') {
-      setPartsInputScan('');
-      setSelectedArrival(null);
-      setPartsInputQty(0);
-      setPartsListOpen(false);
-      setPartsModalOpen(false);
-
-      setPartsLocation('');
-      setPartsWarehouse('');
-      setPartsLocationInputMode('none');
-      setPartsLocationReadOnly(false);
-      setPartsErrorTarget('scan');
-
-      setPartsModalItems([]);
-      setPartsModalTitle('입하목록 선택');
-
-      focusPartsScanForBarcode();
-    }
-
-    if (currentPage === 'finished_IN') {
-      setGoodsScan('');
-      setSelectedGoods(null);
-      setGoodsLocation('');
-      setGoodsQty(0);
-      setGoodsAccordionOpen(false);
-
-      setGoodsScanInputMode('none');
-
-      setTimeout(() => {
-        if (goodsErrorTarget === 'location') {
-          goodsLocationRef.current?.focus();
-          goodsLocationRef.current?.select();
-          return;
-        }
-
-        goodsInputRef.current?.focus();
-        goodsInputRef.current?.select();
-      }, 100);
-    }
-
-    if (currentPage === 'PROD_INPUT') {
-      setProdWoScan('');
-      setSelectedWo(null);
-      setSelectedSubPart(null);
-      setPendingSubPart(null);
-
-      setProdQty(0);
-      setProdAccordionOpen(false);
-      setProdSubModalOpen(false);
-
-      setProdLocation('');
-      setProdWarehouse('');
-      setProdLocationInputMode('none');
-      setProdLocationReadOnly(false);
-
-      setProdErrorTarget('wo');
-      setProdWoInputMode('none');
-
-      setTimeout(() => {
-        prodWoInputRef.current?.focus();
-      }, 150);
-    }
-  }, [currentPage]);
 
   const [user, setUser] = useState(null); // { id: 'tester', name: '홍길동', dept: '생산팀' }
   const [loginId, setLoginId] = useState('tester');
@@ -296,11 +231,23 @@ export default function App() {
   const [prodSubModalOpen, setProdSubModalOpen] = useState(false);
 
   // [4. 출고 상태]
+  const outLocRef = React.useRef<HTMLInputElement | null>(null);
+  const outQtyRef = React.useRef<HTMLInputElement | null>(null);
+
   const [outLocScan, setOutLocScan] = useState('');
-  const [selectedOutItem, setSelectedOutItem] = useState(null); // SHIPMENT_PARTS_MOCK item
+  const [outWarehouse, setOutWarehouse] = useState('');
+
+  const [selectedOutItem, setSelectedOutItem] = useState<any>(null);
+  const [pendingOutItem, setPendingOutItem] = useState<any>(null);
+
   const [outQty, setOutQty] = useState(1);
+  const [outLocInputMode, setOutLocInputMode] = useState<'none' | 'text'>('none');
+
   const [outAccordionOpen, setOutAccordionOpen] = useState(false);
   const [outListModalOpen, setOutListModalOpen] = useState(false);
+
+  const [outModalOpenCode, setOutModalOpenCode] = useState<string | null>(null);
+  const [outModalOpenName, setOutModalOpenName] = useState<string | null>(null);
 
   // [5. 재고이동 상태]
   const [transFromLoc, setTransFromLoc] = useState('');
@@ -321,6 +268,119 @@ export default function App() {
   const [inspectReason, setInspectReason] = useState('오적재 실사 정정');
   const [inspectAccordionOpen, setInspectAccordionOpen] = useState(false);
   const [inspectListModalOpen, setInspectListModalOpen] = useState(false);
+
+  useEffect(() => {
+    const styleId = 'pda-mobile-input-fix';
+
+    if (document.getElementById(styleId)) return;
+
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.innerHTML = `
+      input,
+      textarea {
+        font-size: 16px !important;
+        -webkit-text-size-adjust: 100%;
+      }
+
+      input[type="text"],
+      input[type="number"],
+      textarea {
+        autocorrect: off;
+        autocomplete: off;
+        -webkit-user-select: text;
+        user-select: text;
+      }
+    `;
+
+    document.head.appendChild(style);
+
+    return () => {
+      document.getElementById(styleId)?.remove();
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (currentPage === 'PARTS_IN') {
+      setPartsInputScan('');
+      setSelectedArrival(null);
+      setPartsInputQty(0);
+      setPartsListOpen(false);
+      setPartsModalOpen(false);
+
+      setPartsLocation('');
+      setPartsWarehouse('');
+      setPartsLocationInputMode('none');
+      setPartsLocationReadOnly(false);
+      setPartsErrorTarget('scan');
+
+      setPartsModalItems([]);
+      setPartsModalTitle('입하목록 선택');
+
+      focusPartsScanForBarcode();
+    }
+
+    if (currentPage === 'finished_IN') {
+      setGoodsScan('');
+      setSelectedGoods(null);
+      setGoodsLocation('');
+      setGoodsQty(0);
+      setGoodsAccordionOpen(false);
+
+      setGoodsScanInputMode('none');
+
+      setTimeout(() => {
+        if (goodsErrorTarget === 'location') {
+          goodsLocationRef.current?.focus();
+          goodsLocationRef.current?.select();
+          return;
+        }
+
+        goodsInputRef.current?.focus();
+        goodsInputRef.current?.select();
+      }, 100);
+    }
+
+    if (currentPage === 'PROD_INPUT') {
+      setProdWoScan('');
+      setSelectedWo(null);
+      setSelectedSubPart(null);
+      setPendingSubPart(null);
+
+      setProdQty(0);
+      setProdAccordionOpen(false);
+      setProdSubModalOpen(false);
+
+      setProdLocation('');
+      setProdWarehouse('');
+      setProdLocationInputMode('none');
+      setProdLocationReadOnly(false);
+
+      setProdErrorTarget('wo');
+      setProdWoInputMode('none');
+
+      setTimeout(() => {
+        prodWoInputRef.current?.focus();
+      }, 150);
+    }
+
+    if (currentPage === 'OUT') {
+      setOutLocScan('');
+      setOutWarehouse('');
+      setSelectedOutItem(null);
+      setPendingOutItem(null);
+      setOutQty(1);
+      setOutAccordionOpen(false);
+      setOutListModalOpen(false);
+      setOutModalOpenCode(null);
+      setOutModalOpenName(null);
+      setOutLocInputMode('none');
+
+      setTimeout(() => {
+        outLocRef.current?.focus();
+      }, 150);
+    }
+  }, [currentPage]);
 
   // ==========================================
   // 유틸리티 함수들
@@ -769,20 +829,49 @@ export default function App() {
   };
 
   // [4. 출고]
-  const handleOutLocScan = () => {
-    const target = outLocScan.trim();
+  const handleOutLocScan = (scanValue = outLocScan) => {
+    const target = scanValue.trim();
+
     if (!target) {
-      setErrorMsg('출고 위치 바코드를 스캔해 주세요.');
+      hidePdaKeyboard();
+      setErrorMsg('출고 위치를 스캔해 주세요.');
       return;
     }
-    // 위치코드 중복 처리 후 출고 품목 로드
-    checkWarehouseOverlap(target, (warehouse) => {
-      showLoading(() => {
-        // 첫번째 출고 대상 로드
-        setSelectedOutItem(SHIPMENT_PARTS_MOCK[0]);
-        setOutQty(SHIPMENT_PARTS_MOCK[0].qty);
-      });
-    }, '출고 창고 선택');
+
+    setOutLocScan(target);
+    hidePdaKeyboard();
+
+    const matchedWHs = findWarehousesByCode(target);
+
+    if (matchedWHs.length === 0) {
+      setSelectedOutItem(null);
+      setPendingOutItem(null);
+      setOutWarehouse('');
+      setOutQty(1);
+      setOutListModalOpen(false);
+      hidePdaKeyboard();
+      setErrorMsg('출고 위치를 찾을 수 없습니다.\n스캔한 위치 정보가 존재하지 않습니다.');
+      return;
+    }
+
+    checkWarehouseOverlap(
+      target,
+      (warehouse) => {
+        showLoading(() => {
+          setOutWarehouse(warehouse);
+
+          setSelectedOutItem(null);
+          setPendingOutItem(null);
+          setOutQty(1);
+          setOutAccordionOpen(false);
+
+          setOutModalOpenCode(null);
+          setOutModalOpenName(null);
+          setOutListModalOpen(true);
+        });
+      },
+      '창고 선택'
+    );
   };
 
   // [5. 재고이동]
@@ -2268,114 +2357,329 @@ export default function App() {
           {/* [화면 5] 출고 (OUT) */}
           {/* ------------------------------------------ */}
           {currentPage === 'OUT' && (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '16px', boxSizing: 'border-box' }}>
-              
-              {/* 출고 위치 스캔 */}
+            <div
+              style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                padding: '12px 14px 8px',
+                boxSizing: 'border-box',
+                backgroundColor: '#FFFFFF'
+              }}
+            >
               <div style={{ marginBottom: '12px' }}>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: 'bold', color: COLORS.textMuted, marginBottom: '6px' }}>출고 위치 바코드 스캔</label>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <div style={{ position: 'relative', flex: 1 }}>
-                    <input 
-                      type="text"
-                      placeholder="출고 대상 창고 위치 스캔"
-                      value={outLocScan}
-                      onChange={(e) => setOutLocScan(e.target.value)}
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    color: COLORS.textMuted,
+                    marginBottom: '6px'
+                  }}
+                >
+                  위치
+                </label>
+
+                <div style={{ position: 'relative' }}>
+                  <input
+                    ref={outLocRef}
+                    type="text"
+                    autoComplete="off"
+                    inputMode={outLocInputMode}
+                    placeholder="위치 바코드 스캔"
+                    value={outLocScan}
+                    onContextMenu={(e) => e.preventDefault()}
+                    onFocus={(e) => {
+                      setOutLocInputMode('none');
+                      e.currentTarget.select();
+                    }}
+                    onClick={(e) => {
+                      setOutLocInputMode('text');
+                      e.currentTarget.select();
+                    }}
+                    onChange={(e) => setOutLocScan(e.currentTarget.value)}
+                    onInput={(e) => {
+                      setOutLocScan(e.currentTarget.value);
+                    }}
+                    onKeyUp={(e) => {
+                      if (e.key === 'Enter' || e.key === 'Tab') {
+                        e.preventDefault();
+
+                        const value = e.currentTarget.value;
+
+                        setOutLocScan(value);
+                        handleOutLocScan(value);
+                      }
+                    }}
+                    style={{
+                      width: '100%',
+                      height: '48px',
+                      borderRadius: '8px',
+                      border: `2px solid ${COLORS.primary}`,
+                      padding: '0 42px 0 12px',
+                      fontSize: '16px',
+                      fontWeight: '700',
+                      boxSizing: 'border-box',
+                      backgroundColor: '#FFFFFF',
+                      color: COLORS.textMain,
+                      WebkitTouchCallout: 'none',
+                      userSelect: 'text',
+                      WebkitUserSelect: 'text'
+                    }}
+                  />
+                  <span
+                    style={{
+                      position: 'absolute',
+                      right: '12px',
+                      top: '13px',
+                      color: COLORS.primary
+                    }}
+                  >
+                    <SvgBarcode />
+                  </span>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  flex: 1,
+                  opacity: selectedOutItem ? 1 : 0.45,
+                  pointerEvents: selectedOutItem ? 'auto' : 'none'
+                }}
+              >
+                <div
+                  style={{
+                    backgroundColor: '#F8FAFC',
+                    borderRadius: '10px',
+                    border: `1px solid ${COLORS.border}`,
+                    padding: '10px 12px',
+                    marginBottom: '12px'
+                  }}
+                >
+                  <div
+                    style={{
+                      borderBottom: `1px dashed ${COLORS.border}`,
+                      paddingBottom: '10px',
+                      marginBottom: '10px'
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: '11px',
+                        color: COLORS.textMuted,
+                        fontWeight: 'bold',
+                        marginBottom: '6px'
+                      }}
+                    >
+                      품번
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: '14px',
+                        color: selectedOutItem ? COLORS.textMain : '#A0AEC0',
+                        fontWeight: '800',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}
+                    >
+                      {selectedOutItem ? selectedOutItem.code : '-'}
+                    </div>
+                  </div>
+
+                  <div
+                    onClick={() => selectedOutItem && setOutAccordionOpen(!outAccordionOpen)}
+                    style={{
+                      borderBottom: `1px dashed ${COLORS.border}`,
+                      paddingBottom: '10px',
+                      marginBottom: '10px',
+                      cursor: selectedOutItem ? 'pointer' : 'default'
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: '11px',
+                        color: COLORS.textMuted,
+                        fontWeight: 'bold',
+                        marginBottom: '6px'
+                      }}
+                    >
+                      품명
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      <div
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          fontSize: '14px',
+                          color: selectedOutItem ? COLORS.textMain : '#A0AEC0',
+                          fontWeight: '800',
+                          whiteSpace: outAccordionOpen ? 'normal' : 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          lineHeight: '1.35',
+                          wordBreak: outAccordionOpen ? 'keep-all' : 'normal'
+                        }}
+                      >
+                        {selectedOutItem ? selectedOutItem.name : '-'}
+                      </div>
+
+                      {selectedOutItem && (
+                        <span style={{ color: COLORS.primary, flexShrink: 0 }}>
+                          {outAccordionOpen ? <SvgChevronUp /> : <SvgChevronDown />}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div
+                      style={{
+                        fontSize: '11px',
+                        color: COLORS.textMuted,
+                        fontWeight: 'bold',
+                        marginBottom: '6px'
+                      }}
+                    >
+                      재고
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: '14px',
+                        fontWeight: '800',
+                        color: selectedOutItem ? COLORS.darkBg : '#A0AEC0'
+                      }}
+                    >
+                      {selectedOutItem ? `${selectedOutItem.qty}EA` : '0EA'}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '12px' }}>
+                  <label
+                    style={{
+                      display: 'block',
+                      fontSize: '12px',
+                      fontWeight: 'bold',
+                      color: COLORS.textMuted,
+                      marginBottom: '6px'
+                    }}
+                  >
+                    출고수량
+                  </label>
+
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '52px minmax(0, 1fr) 52px',
+                      gap: '8px',
+                      width: '100%',
+                      boxSizing: 'border-box'
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOutQty(Math.max(0, outQty - 1));
+                        hidePdaKeyboard();
+                      }}
+                      style={{
+                        height: '48px',
+                        borderRadius: '10px',
+                        backgroundColor: COLORS.lightBg,
+                        border: `1px solid ${COLORS.border}`,
+                        fontSize: '22px',
+                        fontWeight: 'bold',
+                        color: COLORS.darkBg
+                      }}
+                    >
+                      -
+                    </button>
+
+                    <input
+                      ref={outQtyRef}
+                      type="number"
+                      value={outQty}
+                      onChange={(e) =>
+                        setOutQty(Math.max(0, Number(e.currentTarget.value) || 0))
+                      }
+                      onFocus={(e) => e.currentTarget.select()}
+                      onClick={(e) => e.currentTarget.select()}
+                      onContextMenu={(e) => e.preventDefault()}
                       style={{
                         width: '100%',
-                        height: '46px',
-                        borderRadius: '8px',
+                        minWidth: 0,
+                        height: '48px',
+                        textAlign: 'center',
+                        fontSize: '20px',
+                        fontWeight: 'bold',
                         border: `2px solid ${COLORS.primary}`,
-                        padding: '0 40px 0 12px',
-                        fontSize: '14px',
+                        borderRadius: '10px',
+                        color: COLORS.textMain,
                         boxSizing: 'border-box'
                       }}
                     />
-                    <span style={{ position: 'absolute', right: '12px', top: '13px', color: COLORS.primary }}>
-                      <SvgBarcode />
-                    </span>
-                  </div>
-                  <button onClick={handleOutLocScan} style={{ backgroundColor: COLORS.darkBg, color: COLORS.white, padding: '0 16px', borderRadius: '8px', fontWeight: 'bold', border: 'none', cursor: 'pointer' }}>
-                    조회
-                  </button>
-                </div>
-                <div style={{ fontSize: '11px', color: COLORS.textMuted, marginTop: '4px' }}>
-                  테스트 가능 중복 위치코드: <strong onClick={() => setOutLocScan('C03')} style={{ textDecoration: 'underline', cursor: 'pointer', color: COLORS.primary }}>C03</strong> (모든 창고 소속)
-                </div>
-              </div>
 
-              {/* 출고 부품 정보 */}
-              <div style={{ flex: 1, opacity: selectedOutItem ? 1 : 0.4, pointerEvents: selectedOutItem ? 'auto' : 'none' }}>
-                <div style={{ backgroundColor: COLORS.white, borderRadius: '12px', padding: '14px', border: `1px solid ${COLORS.border}`, marginBottom: '12px' }}>
-                  
-                  {/* 품명 및 아코디언 */}
-                  <div style={{ marginBottom: '10px' }}>
-                    <div 
-                      onClick={() => setOutAccordionOpen(!outAccordionOpen)}
-                      style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOutQty(outQty + 1);
+                        hidePdaKeyboard();
+                      }}
+                      style={{
+                        height: '48px',
+                        borderRadius: '10px',
+                        backgroundColor: COLORS.lightBg,
+                        border: `1px solid ${COLORS.border}`,
+                        fontSize: '22px',
+                        fontWeight: 'bold',
+                        color: COLORS.darkBg
+                      }}
                     >
-                      <span style={{ fontSize: '12px', color: COLORS.textMuted, fontWeight: 'bold' }}>출고 품번 / 품명 정보</span>
-                      <span style={{ color: COLORS.primary }}>{outAccordionOpen ? <SvgChevronUp /> : <SvgChevronDown />}</span>
-                    </div>
-
-                    <div style={{ fontSize: '14px', color: COLORS.primary, fontWeight: 'bold', marginTop: '4px' }}>
-                      {selectedOutItem ? selectedOutItem.code : '위치 스캔 시 로드'}
-                    </div>
-
-                    {outAccordionOpen && selectedOutItem && (
-                      <div style={{ fontSize: '11px', color: COLORS.textMuted, marginTop: '4px', lineHeight: '1.4' }}>
-                        품명: {selectedOutItem.name}<br />
-                        규격: {selectedOutItem.spec} | 현재 해당 창고 위치 재고: <strong>{selectedOutItem.qty} EA</strong>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* 출고 수량 설정 */}
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: 'bold', color: COLORS.textMuted, marginBottom: '6px' }}>출고 수량조정</label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <button onClick={() => setOutQty(Math.max(1, outQty - 1))} style={{ width: '44px', height: '44px', borderRadius: '10px', backgroundColor: COLORS.lightBg, border: `1px solid ${COLORS.border}`, fontSize: '18px', fontWeight: 'bold' }}>-</button>
-                    <input 
-                      type="number"
-                      value={outQty}
-                      onChange={(e) => setOutQty(Number(e.target.value))}
-                      style={{ flex: 1, height: '44px', textAlign: 'center', fontSize: '17px', fontWeight: 'bold', border: `2px solid ${COLORS.primary}`, borderRadius: '10px' }}
-                    />
-                    <button onClick={() => setOutQty(outQty + 1)} style={{ width: '44px', height: '44px', borderRadius: '10px', backgroundColor: COLORS.lightBg, border: `1px solid ${COLORS.border}`, fontSize: '18px', fontWeight: 'bold' }}>+</button>
-                  </div>
-                </div>
-
-                {/* 위치별 출고 리스트 모달 조회 */}
-                {selectedOutItem && (
-                  <div style={{ textAlign: 'center', marginBottom: '8px' }}>
-                    <button 
-                      onClick={() => setOutListModalOpen(true)}
-                      style={{ background: 'none', border: 'none', color: COLORS.primary, fontSize: '13px', fontWeight: 'bold', textDecoration: 'underline', cursor: 'pointer' }}
-                    >
-                      위치별 출고 품목 리스트 수동 변경
+                      +
                     </button>
                   </div>
-                )}
+                </div>
               </div>
 
-              {/* 완료 처리 */}
-              <button 
+              <button
                 onClick={() => {
                   if (!selectedOutItem) return;
-                  triggerSuccessSubmit('제품/자재 출고', () => {
-                    setSelectedOutItem(null);
+
+                  hidePdaKeyboard();
+
+                  triggerSuccessSubmit('출고 등록', () => {
                     setOutLocScan('');
+                    setOutWarehouse('');
+                    setSelectedOutItem(null);
+                    setPendingOutItem(null);
+                    setOutQty(1);
+                    setOutAccordionOpen(false);
+
+                    setTimeout(() => {
+                      outLocRef.current?.focus();
+                      outLocRef.current?.select();
+                    }, 100);
                   });
                 }}
                 disabled={!selectedOutItem}
                 style={{
                   width: '100%',
-                  height: '56px',
+                  height: '52px',
                   backgroundColor: selectedOutItem ? COLORS.primary : '#CBD5E0',
                   color: COLORS.white,
                   border: 'none',
-                  borderRadius: '12px',
-                  fontSize: '17px',
+                  borderRadius: '10px',
+                  fontSize: '16px',
                   fontWeight: 'bold'
                 }}
               >
@@ -3388,45 +3692,233 @@ export default function App() {
         {/* [모달 5] 출고 대상 수동 리스트 변경 모달 */}
         {/* ========================================== */}
         {outListModalOpen && (
-          <div style={{
-            position: 'absolute',
-            top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            zIndex: 110,
-            display: 'flex',
-            justifyContent: 'flex-end',
-            flexDirection: 'column'
-          }}>
-            <div style={{ backgroundColor: COLORS.white, borderTopLeftRadius: '20px', borderTopRightRadius: '20px', maxHeight: '60%' }}>
-              <div style={{ padding: '14px 16px', borderBottom: `1px solid ${COLORS.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: COLORS.darkBg, color: COLORS.white }}>
-                <span style={{ fontWeight: 'bold', fontSize: '14px' }}>출고 대상 수동 품목 선택</span>
-                <button onClick={() => setOutListModalOpen(false)} style={{ background: 'none', border: 'none', color: COLORS.white, fontSize: '16px' }}>✕</button>
-              </div>
-              <div style={{ overflowY: 'auto', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {SHIPMENT_PARTS_MOCK.map((item) => (
-                  <div 
-                    key={item.code}
-                    onClick={() => {
-                      setSelectedOutItem(item);
-                      setOutQty(item.qty);
-                      setOutListModalOpen(false);
-                    }}
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: COLORS.white,
+              zIndex: 110,
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+          >
+            <div
+              style={{
+                padding: '14px 16px',
+                borderBottom: `1px solid ${COLORS.border}`,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                backgroundColor: COLORS.darkBg,
+                color: COLORS.white
+              }}
+            >
+              <span style={{ fontWeight: 'bold', fontSize: '15px' }}>
+                위치별 출고 목록
+              </span>
+
+              <button
+                onClick={() => {
+                  setOutListModalOpen(false);
+                  setPendingOutItem(null);
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: COLORS.white,
+                  fontSize: '18px',
+                  cursor: 'pointer'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div
+              style={{
+                flex: 1,
+                overflowY: 'auto',
+                padding: '12px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '10px',
+                backgroundColor: '#FFFFFF'
+              }}
+            >
+              {SHIPMENT_PARTS_MOCK.map((item) => (
+                <div
+                  key={item.code}
+                  onClick={() => {
+                    hidePdaKeyboard();
+                    setPendingOutItem(item);
+                  }}
+                  style={{
+                    padding: '12px',
+                    borderRadius: '10px',
+                    border:
+                      pendingOutItem?.code === item.code
+                        ? `2px solid ${COLORS.primary}`
+                        : `1.5px solid ${COLORS.border}`,
+                    backgroundColor:
+                      pendingOutItem?.code === item.code ? '#FFF7ED' : '#FFF',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <div
                     style={{
-                      padding: '12px',
-                      borderRadius: '8px',
-                      border: `1.5px solid ${selectedOutItem?.code === item.code ? COLORS.primary : COLORS.border}`,
-                      backgroundColor: selectedOutItem?.code === item.code ? '#FFF5F0' : '#FFF',
-                      cursor: 'pointer'
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      marginBottom: '6px'
                     }}
                   >
-                    <div style={{ fontWeight: 'bold', fontSize: '13px', color: COLORS.primary }}>{item.code}</div>
-                    <div style={{ fontSize: '11px', color: COLORS.textMuted, marginTop: '2px' }}>{item.name} ({item.spec})</div>
-                    <div style={{ fontSize: '11px', color: COLORS.textMain, marginTop: '4px', textAlign: 'right' }}>
-                      출하 가능 잔고: <strong>{item.qty} EA</strong>
+                    <div
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        fontSize: '13px',
+                        fontWeight: 'bold',
+                        color: COLORS.darkBg,
+                        whiteSpace: outModalOpenCode === item.code ? 'normal' : 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        lineHeight: '1.35'
+                      }}
+                    >
+                      품번: {item.code}
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOutModalOpenCode(
+                          outModalOpenCode === item.code ? null : item.code
+                        );
+                      }}
+                      style={{
+                        width: '28px',
+                        height: '28px',
+                        border: 'none',
+                        background: 'transparent',
+                        color: COLORS.primary,
+                        cursor: 'pointer',
+                        flexShrink: 0
+                      }}
+                    >
+                      {outModalOpenCode === item.code ? <SvgChevronUp /> : <SvgChevronDown />}
+                    </button>
                   </div>
-                ))}
-              </div>
+
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      marginBottom: '8px'
+                    }}
+                  >
+                    <div
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        fontSize: '13px',
+                        fontWeight: 'bold',
+                        color: COLORS.darkBg,
+                        whiteSpace: outModalOpenName === item.code ? 'normal' : 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        lineHeight: '1.35'
+                      }}
+                    >
+                      품명: {item.name}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOutModalOpenName(
+                          outModalOpenName === item.code ? null : item.code
+                        );
+                      }}
+                      style={{
+                        width: '28px',
+                        height: '28px',
+                        border: 'none',
+                        background: 'transparent',
+                        color: COLORS.primary,
+                        cursor: 'pointer',
+                        flexShrink: 0
+                      }}
+                    >
+                      {outModalOpenName === item.code ? <SvgChevronUp /> : <SvgChevronDown />}
+                    </button>
+                  </div>
+
+                  <div
+                    style={{
+                      borderTop: `1px dashed ${COLORS.border}`,
+                      paddingTop: '8px',
+                      fontSize: '12px',
+                      fontWeight: 'bold',
+                      color: COLORS.primary,
+                      textAlign: 'left'
+                    }}
+                  >
+                    재고: {item.qty} EA
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div
+              style={{
+                padding: '12px',
+                borderTop: `1px solid ${COLORS.border}`,
+                backgroundColor: COLORS.white
+              }}
+            >
+              <button
+                onClick={() => {
+                  if (!pendingOutItem) {
+                    hidePdaKeyboard();
+                    setErrorMsg('출고할 품목을 선택해주세요.');
+                    return;
+                  }
+
+                  hidePdaKeyboard();
+
+                  setSelectedOutItem(pendingOutItem);
+                  setOutQty(pendingOutItem.qty);
+                  setOutAccordionOpen(false);
+
+                  setOutModalOpenCode(null);
+                  setOutModalOpenName(null);
+                  setOutListModalOpen(false);
+
+                  setTimeout(() => {
+                    outLocRef.current?.focus();
+                    outLocRef.current?.select();
+                  }, 200);
+                }}
+                style={{
+                  width: '100%',
+                  height: '52px',
+                  backgroundColor: COLORS.primary,
+                  color: COLORS.white,
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer'
+                }}
+              >
+                적용
+              </button>
             </div>
           </div>
         )}
@@ -3609,6 +4101,17 @@ export default function App() {
                     }
 
                     focusProdWoForBarcode();
+                  }
+
+                  if (currentPage === 'OUT') {
+                    setErrorMsg(null);
+
+                    setTimeout(() => {
+                      outLocRef.current?.focus();
+                      outLocRef.current?.select();
+                    }, 150);
+
+                    return;
                   }
                 }}
                 style={{
