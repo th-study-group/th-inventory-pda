@@ -1433,7 +1433,7 @@ export default function App() {
               backgroundColor: '#FFFFFF'
             }}>
               <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-                <h2 style={{ fontSize: '24px', fontWeight: '800', color: COLORS.darkBg, margin: '0 0 8px 0' }}>EPIC SYSTEMS</h2>
+                <h2 style={{ fontSize: '24px', fontWeight: '800', color: COLORS.darkBg, margin: '0 0 8px 0' }}>티에이치스터디</h2>
                 <p style={{ fontSize: '15px', color: COLORS.textMuted, margin: 0 }}>재고관리 PDA 로그인</p>
               </div>
 
@@ -1569,7 +1569,7 @@ export default function App() {
                 ))}
               </div>
               <div style={{ fontSize: '10px', color: COLORS.textMuted, textAlign: 'center', marginTop: '10px' }}>
-                EPIC SYSTEMS PDA RENEWAL SPECIFICATION V1.3
+                TH-STUDY PDA RENEWAL SPECIFICATION V1.3
               </div>
             </div>
           )}
