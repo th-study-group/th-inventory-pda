@@ -293,7 +293,7 @@ export default function App() {
   const [inspectLoc, setInspectLoc] = useState('');
   const [inspectSelectedPart, setInspectSelectedPart] = useState<any>(null);
   const [pendingInspectPart, setPendingInspectPart] = useState<any>(null);
-  const [inspectQty, setInspectQty] = useState(50);
+  const [inspectQty, setInspectQty] = useState(0);
   const inspectReasonRef = React.useRef<HTMLInputElement | null>(null);
   const [inspectReason, setInspectReason] = useState('');
   const [inspectAccordionOpen, setInspectAccordionOpen] = useState(false);
@@ -418,7 +418,7 @@ export default function App() {
       setInspectLoc('');
       setInspectSelectedPart(null);
       setPendingInspectPart(null);
-      setInspectQty(50);
+      setInspectQty(0);
       setInspectReason('');
       setInspectAccordionOpen(false);
       setInspectListModalOpen(false);
@@ -1259,7 +1259,7 @@ export default function App() {
     setInspectLoc('');
     setInspectSelectedPart(null);
     setPendingInspectPart(null);
-    setInspectQty(50);
+    setInspectQty(0);
     setInspectReason('');
     setInspectAccordionOpen(false);
     setInspectListModalOpen(false);
@@ -3773,7 +3773,7 @@ export default function App() {
                     setInspectSelectedPart(null);
                     setPendingInspectPart(null);
                     setInspectLoc('');
-                    setInspectQty(50);
+                    setInspectQty(0);
                     setInspectReason('');
                     setInspectAccordionOpen(false);
                     setInspectListModalOpen(false);
@@ -3947,7 +3947,7 @@ export default function App() {
                   height: '280px',
                   backgroundColor: '#000',
                   objectFit: 'cover',
-                  transform: 'scaleX(-1)'
+                  transform: 'none'
                 }}
               />
 
