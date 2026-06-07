@@ -263,6 +263,7 @@ export default function App() {
   const transFromLocRef = React.useRef<HTMLInputElement | null>(null);
   const transToLocRef = React.useRef<HTMLInputElement | null>(null);
   const transReasonRef = React.useRef<HTMLInputElement | null>(null);
+  const [transErrorTarget, setTransErrorTarget] = useState<'from' | 'to'>('from');
 
   const [transFromLoc, setTransFromLoc] = useState('');
   const [transSelectedPart, setTransSelectedPart] = useState<any>(null);
@@ -288,12 +289,18 @@ export default function App() {
   const [warehouseSelector, setWarehouseSelector] = useState(null); // { options: [], onSelect, title }
 
   // [6. 재고실사 상태]
+  const inspectLocRef = React.useRef<HTMLInputElement | null>(null);
   const [inspectLoc, setInspectLoc] = useState('');
-  const [inspectSelectedPart, setInspectSelectedPart] = useState(null);
+  const [inspectSelectedPart, setInspectSelectedPart] = useState<any>(null);
+  const [pendingInspectPart, setPendingInspectPart] = useState<any>(null);
   const [inspectQty, setInspectQty] = useState(50);
-  const [inspectReason, setInspectReason] = useState('오적재 실사 정정');
+  const inspectReasonRef = React.useRef<HTMLInputElement | null>(null);
+  const [inspectReason, setInspectReason] = useState('');
   const [inspectAccordionOpen, setInspectAccordionOpen] = useState(false);
   const [inspectListModalOpen, setInspectListModalOpen] = useState(false);
+  const [inspectLocInputMode, setInspectLocInputMode] = useState<'none' | 'text'>('none');
+  const [inspectModalOpenCode, setInspectModalOpenCode] = useState<string | null>(null);
+  const [inspectModalOpenName, setInspectModalOpenName] = useState<string | null>(null);
 
   useEffect(() => {
     const styleId = 'pda-mobile-input-fix';
@@ -404,6 +411,24 @@ export default function App() {
 
       setTimeout(() => {
         outLocRef.current?.focus();
+      }, 150);
+    }
+
+    if (currentPage === 'INSPECT') {
+      setInspectLoc('');
+      setInspectSelectedPart(null);
+      setPendingInspectPart(null);
+      setInspectQty(50);
+      setInspectReason('');
+      setInspectAccordionOpen(false);
+      setInspectListModalOpen(false);
+      setInspectLocInputMode('none');
+      setInspectModalOpenCode(null);
+      setInspectModalOpenName(null);
+
+      setTimeout(() => {
+        inspectLocRef.current?.focus();
+        inspectLocRef.current?.select();
       }, 150);
     }
   }, [currentPage]);
@@ -1014,18 +1039,30 @@ export default function App() {
     setTransFromLoc(target);
     hidePdaKeyboard();
 
+    const resetTransByFromLocation = () => {
+      setTransSelectedPart(null);
+      setPendingTransPart(null);
+      setTransToLoc('');
+      setTransQty(0);
+      setTransReason('');
+      setTransAccordionOpen(false);
+      setTransListModalOpen(false);
+      setTransModalOpenCode(null);
+      setTransModalOpenName(null);
+    };
+
     if (!target) {
-      setErrorMsg('출발지 위치를 스캔해 주세요.');
+      setTransErrorTarget('from');
+      resetTransByFromLocation();
+      setErrorMsg('위치를 스캔해 주세요.');
       return;
     }
 
     const matchedWHs = findWarehousesByCode(target);
 
     if (matchedWHs.length === 0) {
-      setTransSelectedPart(null);
-      setPendingTransPart(null);
-      setTransQty(0);
-      setTransListModalOpen(false);
+      setTransErrorTarget('from');
+      resetTransByFromLocation();
       setErrorMsg('등록되지 않은 위치입니다.');
       return;
     }
@@ -1034,16 +1071,11 @@ export default function App() {
       target,
       () => {
         showLoading(() => {
-          setTransSelectedPart(null);
-          setPendingTransPart(null);
-          setTransQty(0);
-          setTransAccordionOpen(false);
-          setTransModalOpenCode(null);
-          setTransModalOpenName(null);
+          resetTransByFromLocation();
           setTransListModalOpen(true);
         });
       },
-      '출발 창고 선택'
+      '위치 창고 선택'
     );
   };
 
@@ -1054,13 +1086,15 @@ export default function App() {
     hidePdaKeyboard();
 
     if (!target) {
-      setErrorMsg('도착지 위치를 스캔해 주세요.');
+      setTransErrorTarget('to');
+      setErrorMsg('이동 위치를 스캔해 주세요.');
       return;
     }
 
     const matchedWHs = findWarehousesByCode(target);
 
     if (matchedWHs.length === 0) {
+      setTransErrorTarget('to');
       setErrorMsg('등록되지 않은 이동위치입니다.');
       return;
     }
@@ -1073,7 +1107,7 @@ export default function App() {
           transToLocRef.current?.select();
         }, 150);
       },
-      '도착 창고 선택'
+      '이동 창고 선택'
     );
   };
 
@@ -1148,8 +1182,13 @@ export default function App() {
       stopTransQrScan();
 
       if (target === 'from') {
+        if (currentPage === 'INSPECT') {
+          setInspectLoc(value);
+          handleInspectLocScan(value);
+          return;
+        }
+
         setTransFromLoc(value);
-        handleTransFromLocScan(value);
         return;
       }
 
@@ -1167,21 +1206,71 @@ export default function App() {
   };
 
   // [6. 재고실사]
-  const handleInspectLocScan = (val) => {
-    setInspectLoc(val);
-    if (value.trim()) {
-      checkWarehouseOverlap(val, (wh) => {
-        // 실사 대상 품목 로드
-        setInspectSelectedPart({
-          code: 'RM-ENS-02-VERY-LONG-PART-NAME-2026-A-B-C',
-          name: '이랜시스 통합 제어 모듈_베이스온_테스트_2',
-          qty: 4
-        });
-        setInspectQty(4);
-      }, '실사 창고 선택');
+  const handleInspectLocScan = (scanValue = inspectLoc) => {
+    const target = scanValue.trim();
+
+    setInspectLoc(target);
+    hidePdaKeyboard();
+
+    const resetInspectByInvalidLocation = () => {
+      setInspectSelectedPart(null);
+      setPendingInspectPart(null);
+      setInspectQty(0);
+      setInspectReason('');
+      setInspectAccordionOpen(false);
+      setInspectListModalOpen(false);
+      setInspectModalOpenCode(null);
+      setInspectModalOpenName(null);
+    };
+
+    if (!target) {
+      resetInspectByInvalidLocation();
+      setErrorMsg('실사 위치를 스캔해 주세요.');
+      return;
     }
+
+    const matchedWHs = findWarehousesByCode(target);
+
+    if (matchedWHs.length === 0) {
+      resetInspectByInvalidLocation();
+      setErrorMsg('등록되지 않은 위치입니다.');
+      return;
+    }
+
+    checkWarehouseOverlap(
+      target,
+      () => {
+        showLoading(() => {
+          setInspectSelectedPart(null);
+          setPendingInspectPart(null);
+          setInspectQty(0);
+          setInspectReason('');
+          setInspectAccordionOpen(false);
+          setInspectModalOpenCode(null);
+          setInspectModalOpenName(null);
+          setInspectListModalOpen(true);
+        });
+      },
+      '실사 창고 선택'
+    );
   };
 
+  const resetInspectForm = () => {
+    setInspectLoc('');
+    setInspectSelectedPart(null);
+    setPendingInspectPart(null);
+    setInspectQty(50);
+    setInspectReason('');
+    setInspectAccordionOpen(false);
+    setInspectListModalOpen(false);
+    setInspectModalOpenCode(null);
+    setInspectModalOpenName(null);
+
+    setTimeout(() => {
+      inspectLocRef.current?.focus();
+      inspectLocRef.current?.select();
+    }, 150);
+  };
 
   // 등록 완료 범용 핸들러
   const triggerSuccessSubmit = (menuTitle, resetStateFn) => {
@@ -3378,17 +3467,48 @@ export default function App() {
           {/* [화면 7] 재고실사 (INSPECT) */}
           {/* ------------------------------------------ */}
           {currentPage === 'INSPECT' && (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '16px', boxSizing: 'border-box' }}>
-              
-              {/* 실사 대상 위치 스캔 */}
+            <div
+              style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                padding: '16px',
+                boxSizing: 'border-box'
+              }}
+            >
+              {/* 위치 스캔 */}
               <div style={{ marginBottom: '10px' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: COLORS.textMuted, marginBottom: '4px' }}>실사 위치 스캔</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: COLORS.textMuted, marginBottom: '4px' }}>
+                  위치
+                </label>
+
                 <div style={{ position: 'relative' }}>
-                  <input 
+                  <input
+                    ref={inspectLocRef}
                     type="text"
-                    placeholder="실사 창고 위치 스캔"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    inputMode={inspectLocInputMode}
+                    placeholder="위치 바코드 스캔"
                     value={inspectLoc}
-                    onChange={(e) => handleInspectLocScan(e.target.value)}
+                    onContextMenu={(e) => e.preventDefault()}
+                    onFocus={(e) => {
+                      stopVoiceRecordingIfActive();
+                      setInspectLocInputMode('none');
+                      e.currentTarget.select();
+                    }}
+                    onClick={(e) => {
+                      setInspectLocInputMode('text');
+                      e.currentTarget.select();
+                    }}
+                    onChange={(e) => setInspectLoc(e.currentTarget.value)}
+                    onKeyUp={(e) => {
+                      if (e.key === 'Enter' || e.key === 'Tab') {
+                        e.preventDefault();
+                        handleInspectLocScan(e.currentTarget.value);
+                      }
+                    }}
                     style={{
                       width: '100%',
                       height: '42px',
@@ -3399,63 +3519,206 @@ export default function App() {
                       boxSizing: 'border-box'
                     }}
                   />
-                  <span style={{ position: 'absolute', right: '10px', top: '11px', color: COLORS.primary }}>
+
+                  <button
+                    type="button"
+                    onClick={() => startTransQrScan('from')}
+                    style={{
+                      position: 'absolute',
+                      right: '8px',
+                      top: '8px',
+                      width: '28px',
+                      height: '28px',
+                      border: 'none',
+                      background: 'transparent',
+                      color: COLORS.primary,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer'
+                    }}
+                  >
                     <SvgBarcode />
-                  </span>
-                </div>
-                <div style={{ fontSize: '10px', color: COLORS.textMuted, marginTop: '2px' }}>
-                  중복 위치코드 테스트: <strong onClick={() => handleInspectLocScan('C03')} style={{ color: COLORS.primary, textDecoration: 'underline', cursor: 'pointer' }}>C03</strong>
+                  </button>
                 </div>
               </div>
 
-              {/* 실사 대상 품목 정보 */}
-              <div style={{ backgroundColor: COLORS.white, borderRadius: '12px', padding: '10px 14px', border: `1px solid ${COLORS.border}`, marginBottom: '10px' }}>
-                <div 
-                  onClick={() => setInspectAccordionOpen(!inspectAccordionOpen)}
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
-                >
-                  <span style={{ fontSize: '11px', color: COLORS.textMuted, fontWeight: 'bold' }}>실사 대상 품목 정보</span>
-                  <span style={{ color: COLORS.primary }}>{inspectAccordionOpen ? <SvgChevronUp /> : <SvgChevronDown />}</span>
-                </div>
-
-                <div style={{ fontSize: '13px', color: COLORS.primary, fontWeight: 'bold', marginTop: '2px' }}>
-                  {inspectSelectedPart ? inspectSelectedPart.code : '위치 스캔 시 로드'}
-                </div>
-
-                {inspectAccordionOpen && inspectSelectedPart && (
-                  <div style={{ fontSize: '10px', color: COLORS.textMuted, marginTop: '4px', lineHeight: '1.4' }}>
-                    품명: {inspectSelectedPart.name}<br />
-                    전산 재고수량: <strong>{inspectSelectedPart.qty} EA</strong>
+              {/* 실사 대상 품목 아코디언 */}
+              <div
+                onClick={() => {
+                  if (inspectSelectedPart) {
+                    setInspectAccordionOpen(!inspectAccordionOpen);
+                  }
+                }}
+                style={{
+                  backgroundColor: inspectSelectedPart && inspectAccordionOpen ? '#FFF7ED' : COLORS.white,
+                  borderRadius: '8px',
+                  border: `1px solid ${COLORS.border}`,
+                  padding: '0',
+                  marginBottom: '10px',
+                  cursor: inspectSelectedPart ? 'pointer' : 'default',
+                  overflow: 'hidden',
+                  boxSizing: 'border-box'
+                }}
+              >
+                {!inspectSelectedPart && (
+                  <div
+                    style={{
+                      height: '42px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '0 12px',
+                      fontSize: '13px',
+                      color: COLORS.primary,
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    위치 스캔 후 품목 선택
                   </div>
+                )}
+
+                {inspectSelectedPart && (
+                  <>
+                    <div
+                      style={{
+                        height: '42px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        padding: '0 12px',
+                        boxSizing: 'border-box',
+                        backgroundColor: inspectAccordionOpen ? '#FFF7ED' : COLORS.white
+                      }}
+                    >
+                      <div
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          fontSize: '13px',
+                          fontWeight: 'bold',
+                          color: COLORS.darkBg,
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis'
+                        }}
+                      >
+                        {inspectSelectedPart.code}
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize: '12px',
+                          fontWeight: 'bold',
+                          color: COLORS.primary,
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        재고 {inspectSelectedPart.qty} EA
+                      </div>
+
+                      <span style={{ color: COLORS.primary, display: 'flex', alignItems: 'center' }}>
+                        {inspectAccordionOpen ? <SvgChevronUp /> : <SvgChevronDown />}
+                      </span>
+                    </div>
+
+                    {inspectAccordionOpen && (
+                      <div
+                        style={{
+                          padding: '8px 12px 12px',
+                          backgroundColor: '#FFF7ED',
+                          borderTop: `1px solid ${COLORS.border}`
+                        }}
+                      >
+                        <div style={{ fontSize: '10px', color: COLORS.textMuted, fontWeight: 'bold', marginBottom: '3px' }}>
+                          품번
+                        </div>
+
+                        <div style={{ fontSize: '12px', color: COLORS.darkBg, fontWeight: 'bold', lineHeight: '1.35', marginBottom: '10px' }}>
+                          {inspectSelectedPart.code}
+                        </div>
+
+                        <div style={{ fontSize: '10px', color: COLORS.textMuted, fontWeight: 'bold', marginBottom: '3px' }}>
+                          품명
+                        </div>
+
+                        <div style={{ fontSize: '12px', color: COLORS.darkBg, fontWeight: 'bold', lineHeight: '1.35' }}>
+                          {inspectSelectedPart.name}
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
-              {/* 실사 수량 입력 및 실사사유 */}
+              {/* 수량 / 사유 */}
               <div style={{ opacity: inspectSelectedPart ? 1 : 0.4, pointerEvents: inspectSelectedPart ? 'auto' : 'none', flex: 1 }}>
-                
-                {/* 실사 수량 조정 */}
                 <div style={{ marginBottom: '10px' }}>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: COLORS.textMuted, marginBottom: '4px' }}>실사수량 (+/-)</label>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: COLORS.textMuted, marginBottom: '4px' }}>
+                    실사수량 (+/-)
+                  </label>
+
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <button onClick={() => setInspectQty(Math.max(0, inspectQty - 1))} style={{ width: '38px', height: '38px', borderRadius: '8px', backgroundColor: COLORS.lightBg, border: `1px solid ${COLORS.border}`, fontSize: '16px', fontWeight: 'bold' }}>-</button>
-                    <input 
-                      type="number"
-                      value={inspectQty}
-                      onChange={(e) => setInspectQty(Number(e.target.value))}
+                    <button
+                      onClick={() => setInspectQty(Math.max(0, inspectQty - 1))}
+                      style={{ width: '38px', height: '38px', borderRadius: '8px', backgroundColor: COLORS.lightBg, border: `1px solid ${COLORS.border}`, fontSize: '16px', fontWeight: 'bold' }}
+                    >
+                      -
+                    </button>
+
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      autoComplete="off"
+                      value={String(inspectQty)}
+                      onFocus={(e) => {
+                        stopVoiceRecordingIfActive();
+                        e.currentTarget.select();
+                      }}
+                      onChange={(e) => {
+                        const onlyNumber = e.target.value.replace(/[^0-9]/g, '');
+                        setInspectQty(onlyNumber === '' ? 0 : Number(onlyNumber));
+                      }}
                       style={{ flex: 1, height: '38px', textAlign: 'center', fontSize: '15px', fontWeight: 'bold', border: `2px solid ${COLORS.primary}`, borderRadius: '8px' }}
                     />
-                    <button onClick={() => setInspectQty(inspectQty + 1)} style={{ width: '38px', height: '38px', borderRadius: '8px', backgroundColor: COLORS.lightBg, border: `1px solid ${COLORS.border}`, fontSize: '16px', fontWeight: 'bold' }}>+</button>
+
+                    <button
+                      onClick={() => setInspectQty(inspectQty + 1)}
+                      style={{ width: '38px', height: '38px', borderRadius: '8px', backgroundColor: COLORS.lightBg, border: `1px solid ${COLORS.border}`, fontSize: '16px', fontWeight: 'bold' }}
+                    >
+                      +
+                    </button>
                   </div>
                 </div>
 
-                {/* 실사 사유 입력 및 최신 기능 음성 입력 */}
                 <div style={{ marginBottom: '10px' }}>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: COLORS.textMuted, marginBottom: '4px' }}>실사 사유 기입</label>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: COLORS.textMuted, marginBottom: '4px' }}>
+                    실사사유
+                  </label>
+
                   <div style={{ display: 'flex', gap: '6px' }}>
-                    <input 
+                    <input
+                      ref={inspectReasonRef}
                       type="text"
-                      placeholder="실사 정정 사유 입력"
+                      placeholder="사유를 입력해 주세요."
                       value={inspectReason}
+                      onFocus={(e) => {
+                        const target = e.currentTarget;
+
+                        setTimeout(() => {
+                          target.focus();
+                          target.select();
+                        }, 80);
+                      }}
+                      onClick={(e) => {
+                        const target = e.currentTarget;
+
+                        setTimeout(() => {
+                          target.select();
+                        }, 120);
+                      }}
+                      onContextMenu={(e) => e.preventDefault()}
+                      onMouseUp={(e) => e.preventDefault()}
                       onChange={(e) => setInspectReason(e.target.value)}
                       style={{
                         flex: 1,
@@ -3463,12 +3726,18 @@ export default function App() {
                         borderRadius: '8px',
                         border: `1.5px solid ${isVoiceRecording && voiceTarget === 'inspectReason' ? COLORS.primary : COLORS.border}`,
                         padding: '0 12px',
-                        fontSize: '13px',
+                        fontSize: '16px',
                         boxSizing: 'border-box',
-                        backgroundColor: isVoiceRecording && voiceTarget === 'inspectReason' ? '#FFF5F0' : '#FFF'
+                        backgroundColor: isVoiceRecording && voiceTarget === 'inspectReason' ? '#FFF5F0' : '#FFF',
+                        WebkitTouchCallout: 'none',
+                        userSelect: 'text',
+                        WebkitUserSelect: 'text'
                       }}
                     />
-                    <button 
+
+                    <button
+                      type="button"
+                      data-voice-button="inspectReason"
                       onClick={() => toggleVoiceRecording('inspectReason', inspectReason, setInspectReason)}
                       style={{
                         width: '42px',
@@ -3486,36 +3755,38 @@ export default function App() {
                       <SvgMic />
                     </button>
                   </div>
+
                   {isVoiceRecording && voiceTarget === 'inspectReason' && (
                     <div style={{ fontSize: '10px', color: '#E53E3E', fontWeight: 'bold', marginTop: '2px', textAlign: 'right' }}>
-                      🎙️ 음성 실시간 누적 분석 중...
+                      🎙️ 음성 입력 중입니다. 마이크를 다시 누르면 종료됩니다.
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* 수동 품목 선택 변경 모달 */}
-              {inspectSelectedPart && (
-                <div style={{ textAlign: 'center', marginBottom: '8px' }}>
-                  <button 
-                    onClick={() => setInspectListModalOpen(true)}
-                    style={{ background: 'none', border: 'none', color: COLORS.primary, fontSize: '12px', fontWeight: 'bold', textDecoration: 'underline', cursor: 'pointer' }}
-                  >
-                    실사 대상 수동 리스트 조회 및 선택
-                  </button>
-                </div>
-              )}
-
-              {/* 하단 고정 등록 버튼 */}
-              <button 
+              {/* 완료 버튼 */}
+              <button
                 onClick={() => {
-                  if (!inspectSelectedPart) return;
+                  if (!inspectSelectedPart || inspectQty < 0) return;
+
                   triggerSuccessSubmit('재고실사', () => {
                     setInspectSelectedPart(null);
+                    setPendingInspectPart(null);
                     setInspectLoc('');
+                    setInspectQty(50);
+                    setInspectReason('');
+                    setInspectAccordionOpen(false);
+                    setInspectListModalOpen(false);
+                    setInspectModalOpenCode(null);
+                    setInspectModalOpenName(null);
+
+                    setTimeout(() => {
+                      inspectLocRef.current?.focus();
+                      inspectLocRef.current?.select();
+                    }, 150);
                   });
                 }}
-                disabled={!inspectSelectedPart}
+                disabled={!inspectSelectedPart || inspectQty < 0}
                 style={{
                   width: '100%',
                   height: '52px',
@@ -4543,7 +4814,9 @@ export default function App() {
                 onClick={() => {
                   setTransListModalOpen(false);
                   setInspectListModalOpen(false);
+
                   setPendingTransPart(null);
+                  setPendingInspectPart(null);
                 }}
                 style={{
                   background: 'none',
@@ -4579,17 +4852,28 @@ export default function App() {
                       return;
                     }
 
-                    setInspectSelectedPart(item);
+                    setPendingInspectPart(item);
                   }}
                   style={{
                     padding: '12px',
                     borderRadius: '10px',
                     border:
-                      pendingTransPart?.code === item.code
+                      (
+                        currentPage === 'TRANS'
+                          ? pendingTransPart?.code === item.code
+                          : pendingInspectPart?.code === item.code
+                      )
                         ? `2px solid ${COLORS.primary}`
                         : `1.5px solid ${COLORS.border}`,
+
                     backgroundColor:
-                      pendingTransPart?.code === item.code ? '#FFF7ED' : '#FFF',
+                      (
+                        currentPage === 'TRANS'
+                          ? pendingTransPart?.code === item.code
+                          : pendingInspectPart?.code === item.code
+                      )
+                        ? '#FFF7ED'
+                        : '#FFF',
                     cursor: 'pointer'
                   }}
                 >
@@ -4736,15 +5020,20 @@ export default function App() {
                     return;
                   }
 
-                  if (!inspectSelectedPart) {
+                  if (!pendingInspectPart) {
                     hidePdaKeyboard();
                     setErrorMsg('실사할 품목을 선택해주세요.');
                     return;
                   }
 
-                  setInspectQty(inspectSelectedPart.qty);
+                  hidePdaKeyboard();
+
+                  setInspectSelectedPart(pendingInspectPart);
+                  setInspectQty(pendingInspectPart.qty);
                   setInspectAccordionOpen(false);
                   setInspectListModalOpen(false);
+
+                  setPendingInspectPart(null);
                 }}
                 style={{
                   width: '100%',
@@ -4885,6 +5174,30 @@ export default function App() {
                     setTimeout(() => {
                       outLocRef.current?.focus();
                       outLocRef.current?.select();
+                    }, 150);
+
+                    return;
+                  }
+
+                  if (currentPage === 'TRANS') {
+                    setTimeout(() => {
+                      if (transErrorTarget === 'to') {
+                        transToLocRef.current?.focus();
+                        transToLocRef.current?.select();
+                        return;
+                      }
+
+                      transFromLocRef.current?.focus();
+                      transFromLocRef.current?.select();
+                    }, 150);
+
+                    return;
+                  }
+
+                  if (currentPage === 'INSPECT') {
+                    setTimeout(() => {
+                      inspectLocRef.current?.focus();
+                      inspectLocRef.current?.select();
                     }, 150);
 
                     return;
