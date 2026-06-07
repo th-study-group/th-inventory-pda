@@ -40,14 +40,14 @@ const findWarehousesByCode = (code) => {
   return matched;
 };
 
-// 1. 부품입고 Mock
+// 1. 발주입고 Mock
 const ARRIVAL_MOCK = [
   { id: 'IN-20260527-001', code: '원재료_필리아-MAIN_PCB-520', name: '필리아 ES-55200 MAIN PCB 스펙 패키지', qty: 150 },
   { id: 'IN-20260527-002', code: '원재료_필리아-MODULE-017', name: '필리아 PFM-380CE 지문모듈(원형)_FRONT_TITAN', qty: 100 },
   { id: 'IN-20260527-003', code: '원재료_필리아-MAIN_PCB-520', name: '필리아 ES-85205 MAIN SH', qty: 80 }
 ];
 
-// 2. 생산품입고 Mock
+// 2. 보관입고 Mock
 const FINISHED_GOODS_MOCK = [
   { code: 'PRO-520-FR-022233-99', name: '필리아 ES-520B MAIN_일본어 전용 스펙 패키지', qty: 5 },
   { code: 'PRO-520-ACC-01', name: 'SCREW PACKING (S520)', qty: 500 },
@@ -55,7 +55,7 @@ const FINISHED_GOODS_MOCK = [
   { code: 'PRO-520-FRONT-01', name: 'FRONT FRAME 준비 (S520)', qty: 34 }
 ];
 
-// 3. 생산투입 Mock
+// 3. 사용 Mock
 const WORK_ORDERS_MOCK = {
   'W00370': {
     woNumber: 'W00370',
@@ -175,7 +175,7 @@ export default function App() {
   // 각 기능별 복합 데이터 상태
   // ==========================================
   
-  // [1. 부품입고 상태]
+  // [1. 발주입고 상태]
   const [partsInputScan, setPartsInputScan] = useState('');
   const [selectedArrival, setSelectedArrival] = useState(null); // ARRIVAL_MOCK item
   const [partsInputQty, setPartsInputQty] = useState(150);
@@ -193,7 +193,7 @@ export default function App() {
   const [partsLocationReadOnly, setPartsLocationReadOnly] = useState(false);
   const [partsErrorTarget, setPartsErrorTarget] = useState('scan');
 
-  // [2. 생산품입고 상태]
+  // [2. 보관입고 상태]
   const goodsInputRef = React.useRef(null);
   const goodsLocationRef = React.useRef(null);
   const [goodsScan, setGoodsScan] = useState('');
@@ -207,7 +207,7 @@ export default function App() {
   const [goodsQty, setGoodsQty] = useState(50);
   const [goodsAccordionOpen, setGoodsAccordionOpen] = useState(false);
 
-  // [3. 생산투입 상태]
+  // [3. 사용 상태]
   const [pendingSubPart, setPendingSubPart] = useState<any>(null);
   const prodWoInputRef = React.useRef(null);
   const prodLocationRef = React.useRef(null);
@@ -654,7 +654,7 @@ export default function App() {
   // 각 시나리오별 이벤트 핸들러
   // ==========================================
 
-  // [1. 부품입고]
+  // [1. 발주입고]
 
   const focusPartsScanForBarcode = () => {
     setPartsScanInputMode('none');
@@ -783,7 +783,7 @@ export default function App() {
     );
   };
 
-  // [2. 생산품입고]
+  // [2. 보관입고]
   const handleGoodsScanSearch = (scanValue = goodsScan) => {
     const scannedValue = scanValue.trim();
 
@@ -876,7 +876,7 @@ export default function App() {
     }, '창고 선택');
   };
 
-  // [3. 생산투입]
+  // [3. 사용]
   const focusProdWoForBarcode = () => {
     setProdWoInputMode('none');
 
@@ -1355,9 +1355,9 @@ export default function App() {
               )}
               <h1 style={{ fontSize: '18px', fontWeight: 'bold', margin: 0 }}>
                 {currentPage === 'MAIN' ? '재고관리 PDA' : (
-                  currentPage === 'PARTS_IN' ? '부품입고' :
-                  currentPage === 'finished_IN' ? '생산품입고' :
-                  currentPage === 'PROD_INPUT' ? '생산투입' :
+                  currentPage === 'PARTS_IN' ? '발주입고' :
+                  currentPage === 'finished_IN' ? '보관입고' :
+                  currentPage === 'PROD_INPUT' ? '사용' :
                   currentPage === 'OUT' ? '출고' :
                   currentPage === 'TRANS' ? '재고이동' :
                   currentPage === 'INSPECT' ? '재고실사' : '재고관리 PDA'
@@ -1527,12 +1527,12 @@ export default function App() {
                 flex: 'none'
               }}>
                 {[
-                  { id: 'PARTS_IN', title: '부품입고', desc: 'MATERIAL IN', icon: '📦' },
-                  { id: 'finished_IN', title: '생산품입고', desc: 'PRODUCT IN', icon: '🏭' },
-                  { id: 'OUT', title: '출고', desc: 'DELIVERY', icon: '🚚' },
-                  { id: 'PROD_INPUT', title: '생산투입', desc: 'PROD INPUT', icon: '⚙️' },
-                  { id: 'TRANS', title: '재고이동', desc: 'STOCK TRANS', icon: '🔄' },
-                  { id: 'INSPECT', title: '재고실사', desc: 'INSPECTION', icon: '📝' }
+                  { id: 'PARTS_IN', title: '발주입고', desc: 'MATERIAL IN', icon: '🛒' },
+                  { id: 'finished_IN', title: '보관입고', desc: 'PRODUCT IN', icon: '📥' },
+                  { id: 'OUT', title: '출고', desc: 'DELIVERY', icon: '📤' },
+                  { id: 'PROD_INPUT', title: '사용', desc: 'PROD INPUT', icon: '🧰' },
+                  { id: 'TRANS', title: '재고이동', desc: 'STOCK TRANS', icon: '↔️' },
+                  { id: 'INSPECT', title: '재고실사', desc: 'INSPECTION', icon: '🔍' }
                 ].map((menu) => (
                   <button 
                     key={menu.id}
@@ -1569,13 +1569,13 @@ export default function App() {
                 ))}
               </div>
               <div style={{ fontSize: '10px', color: COLORS.textMuted, textAlign: 'center', marginTop: '10px' }}>
-                TH-STUDY PDA RENEWAL SPECIFICATION V1.3
+                티에이치스터디 재고관리
               </div>
             </div>
           )}
 
           {/* ------------------------------------------ */}
-          {/* [화면 2] 부품입고 (PARTS_IN) */}
+          {/* [화면 2] 발주입고 (PARTS_IN) */}
           {/* ------------------------------------------ */}
           {currentPage === 'PARTS_IN' && (
             <div
@@ -1942,7 +1942,7 @@ export default function App() {
                 onClick={() => {
                   if (!selectedArrival) return;
 
-                  triggerSuccessSubmit('부품입고', () => {
+                  triggerSuccessSubmit('발주입고', () => {
                     setSelectedArrival(null);
                     setPartsInputScan('');
                     setPartsInputQty(0);
@@ -1972,7 +1972,7 @@ export default function App() {
           )}
 
           {/* ------------------------------------------ */}
-          {/* [화면 3] 생산품입고 (finished_IN) */}
+          {/* [화면 3] 보관입고 (finished_IN) */}
           {/* ------------------------------------------ */}
           {currentPage === 'finished_IN' && (
             <div style={{
@@ -2305,7 +2305,7 @@ export default function App() {
                 onClick={() => {
                   if (!selectedGoods || !goodsLocation) return;
 
-                  triggerSuccessSubmit('생산품입고', () => {
+                  triggerSuccessSubmit('보관입고', () => {
                     setSelectedGoods(null);
                     setGoodsScan('');
                     setGoodsLocation('');
@@ -2337,7 +2337,7 @@ export default function App() {
           )}
 
           {/* ------------------------------------------ */}
-          {/* [화면 4] 생산투입 (PROD_INPUT) */}
+          {/* [화면 4] 사용 (PROD_INPUT) */}
           {/* ------------------------------------------ */}
           {currentPage === 'PROD_INPUT' && (
             <div
@@ -2693,7 +2693,7 @@ export default function App() {
 
                   hidePdaKeyboard();
 
-                  triggerSuccessSubmit('생산라인 자재투입', () => {
+                  triggerSuccessSubmit('사용', () => {
                     setSelectedWo(null);
                     setSelectedSubPart(null);
                     setProdWoScan('');
@@ -4018,7 +4018,7 @@ export default function App() {
         )}
 
         {/* ========================================== */}
-        {/* [모달 3] 미입고 입하 목록 전체 조회 모달 (부품입고용) */}
+        {/* [모달 3] 미입고 입하 목록 전체 조회 모달 (발주입고용) */}
         {/* ========================================== */}
         {partsModalOpen && (
           <div style={{
@@ -4182,7 +4182,7 @@ export default function App() {
         )}
 
         {/* ========================================== */}
-        {/* [모달 4] 생산투입 하위 자재 변경 모달 */}
+        {/* [모달 4] 사용 하위 자재 변경 모달 */}
         {/* ========================================== */}
         {prodSubModalOpen && selectedWo && (
           <div
