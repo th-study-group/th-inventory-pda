@@ -1,75 +1,230 @@
-# React + TypeScript + Vite
+# 티에이치스터디 재고관리 PDA
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+티에이치스터디 재고관리 PDA는 개인 물품, 개발 장비, 사무용품, 공구, 반려동물 용품 등 다양한 물품을 관리하기 위한 React 기반 재고관리 프로젝트입니다.
 
-Currently, two official plugins are available:
+기업용 MES에서 사용하는 입고, 출고, 재고이동, 재고실사 개념을 개인과 소규모 환경에서도 쉽게 사용할 수 있도록 단순화한 경량 재고관리 PDA입니다.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 프로젝트 정보
 
-## React Compiler
-
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
-
-Note: This will impact Vite dev & build performances.
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```text
+프로젝트명 : TH-INVENTORY-PDA
+패키지명 : th-mes-pda
+개발방식 : React + TypeScript + Vite
+실행환경 : Web Browser / Mobile Browser / PDA Browser
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 주요 메뉴
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### 품목등록
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+재고로 관리할 품목을 등록하고 수정합니다.
+
+예시
+
+- 모니터
+- 키보드
+- 마우스
+- 랜선
+- 강아지 용품
+- 공구
+
+### 부품입고
+
+외부에서 구매하거나 발주한 물품을 입고 처리합니다.
+
+예시
+
+- 쿠팡 주문
+- 네이버 주문
+- 오프라인 구매
+
+### 생산품입고
+
+입고된 물품을 실제 보관 위치에 적재합니다.
+
+예시
+
+- 창고
+- 서랍
+- 책상
+- 선반
+
+### 생산투입
+
+보관 중인 물품을 실제 사용하거나 소비할 때 처리합니다.
+
+예시
+
+- 랜선 사용
+- 건전지 사용
+- 공구 사용
+- 반려동물 용품 사용
+
+### 출고
+
+재고가 현재 보관 위치에서 제거되는 모든 상황을 처리합니다.
+
+출고 유형 예시
+
+- 판매
+- 대여
+- 양도
+- 폐기
+- 기타
+
+### 재고이동
+
+물품의 보관 위치를 변경합니다.
+
+예시
+
+- 창고 → 서랍
+- 서랍 → 책상
+- 선반 → 보관함
+
+### 재고실사
+
+실제 재고와 시스템 재고를 비교하여 수량을 보정합니다.
+
+### 작업이력
+
+입고, 출고, 이동, 실사 등 모든 재고 변동 이력을 조회합니다.
+
+## 메뉴 구성
+
+```text
+품목등록      | 부품입고
+생산품입고    | 생산투입
+출고          | 재고이동
+재고실사      | 작업이력
+```
+
+## 기본 데이터 구조
+
+```text
+th_items
+├─ 품목 정보
+
+th_locations
+├─ 보관 위치 정보
+
+th_item_stocks
+├─ 위치별 현재고
+
+th_item_histories
+├─ 재고 변동 이력
+```
+
+## 재고 흐름
+
+```text
+품목등록
+    ↓
+
+부품입고
+    ↓
+
+생산품입고
+    ↓
+
+생산투입
+    ↓
+
+출고
+
+또는
+
+재고이동
+
+또는
+
+재고실사
+```
+
+## 개발 환경
+
+```text
+React 19.2.6
+React DOM 19.2.6
+TypeScript 6.0.2
+Vite 8.0.12
+Lucide React 1.17.0
+ZXing Browser 0.2.0
+ESLint 10.3.0
+```
+
+## 설치 방법
+
+```bash
+git clone [저장소주소] # 저장소 복제
+cd TH-INVENTORY-PDA # 프로젝트 이동
+npm install # 패키지 설치
+```
+
+## 개발 서버 실행
+
+```bash
+npm run dev # 개발 서버 실행
+```
+
+기본 실행 주소
+
+```text
+http://localhost:3000
+```
+
+같은 와이파이에 연결된 모바일 기기에서는 다음 형식으로 접속 가능합니다.
+
+```text
+http://[PC내부IP]:3000
+```
+
+## 빌드
+
+```bash
+npm run build # 운영 빌드
+```
+
+## 빌드 결과 확인
+
+```bash
+npm run preview # 빌드 미리보기
+```
+
+## 스크립트
+
+```text
+npm run dev
+npm run build
+npm run lint
+npm run preview
+```
+
+## 향후 개발 예정
+
+```text
+QR 코드 스캔
+바코드 스캔
+모바일 최적화
+PWA
+재고 통계
+대시보드
+API 연동
+티에이치스터디 연동
+```
+
+## 프로젝트 목표
+
+티에이치스터디 재고관리 PDA는 복잡한 ERP 또는 기업용 MES를 대체하기 위한 프로젝트가 아닙니다.
+
+실제 생활 속 물품, 개발 장비, 사무용품, 공구, 반려동물 용품 등을 쉽고 빠르게 관리할 수 있는 경량 재고관리 시스템을 목표로 개발하고 있습니다.
+
+핵심은 품목, 위치, 현재고, 이력이라는 단순한 구조를 유지하면서도 실제 사용 환경에서 필요한 입고, 사용, 이동, 출고, 실사 기능을 빠르게 처리할 수 있도록 만드는 것입니다.
+
+## 라이선스
+
+```text
+Copyright © 티에이치스터디
+
+All Rights Reserved.
 ```
