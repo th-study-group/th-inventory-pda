@@ -153,6 +153,20 @@ ZXing Browser 0.2.0
 ESLint 10.3.0
 ```
 
+## 프로젝트 생성
+
+신규 프로젝트 생성 시 Vite 최신 버전을 사용하여 React + TypeScript 프로젝트를 생성합니다.
+
+```bash
+npm create vite@latest th-mes-pda -- --template react-ts
+```
+
+프로젝트 생성 후 프로젝트 폴더로 이동합니다.
+
+```bash
+cd th-mes-pda
+```
+
 ## 설치 방법
 
 ```bash
